@@ -1,0 +1,19 @@
+node_modules/
+dist/
+.env
+*.log
+workspace/
+secrets/
+voices/
+jarvis-memory.json
+mcp-servers/*/node_modules/
+mcp-servers/*/dist/
+mcp-servers/*/projects.config.json
+
+# added: out-of-iCloud runtime + macOS cruft
+piper-venv/
+__pycache__/
+*.pyc
+.DS_Store
+.claude/
+**/api_keys.json

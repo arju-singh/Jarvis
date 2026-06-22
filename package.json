@@ -1,0 +1,28 @@
+{
+  "name": "jarvis-brain",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Jarvis brain — Claude tool-calling loop + ElevenLabs TTS + MCP product bridge.",
+  "scripts": {
+    "dev": "node --import tsx --env-file=.env server.ts",
+    "doctor": "node --import tsx --env-file=.env preflight.ts",
+    "introspect": "node --import tsx --env-file-if-exists=.env mcp-servers/projects/src/introspect.ts",
+    "build": "tsc",
+    "build:all": "npm run build && npm --prefix mcp-servers/projects run build && npm --prefix mcp-servers/petsacre run build",
+    "start": "node --env-file=.env dist/server.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
+    "@modelcontextprotocol/sdk": "^1.21.0",
+    "express": "^5.1.0",
+    "zod-to-json-schema": "^3.25.2"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.0"
+  }
+}

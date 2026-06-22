@@ -1,0 +1,22 @@
+{
+  "name": "petsacre-mcp",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "petsacre.club MCP server — booking operations for Jarvis.",
+  "bin": { "petsacre-mcp": "dist/index.js" },
+  "scripts": {
+    "build": "tsc",
+    "dev": "node --import tsx src/index.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.21.0",
+    "firebase-admin": "^13.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "projects": [
+    {
+      "id": "petsacre",
+      "label": "petsacre.club",
+      "collection": "bookings",
+      "dateField": "startTime",
+      "statusField": "status",
+      "categoryField": "service",
+      "titleFields": ["petName", "pet", "petsName"],
+      "subtitleFields": ["ownerName", "customerName", "owner", "name"]
+    }
+  ]
+}
