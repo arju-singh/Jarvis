@@ -15,6 +15,8 @@ import express from "express";
 import type { Tool } from "./types.js";
 import { desktopTools } from "./tools/desktop.js";
 import { assistantTools } from "./tools/assistant.js";
+import { systemTools } from "./tools/system.js";
+import { mediaTools } from "./tools/media.js";
 import { memoryTools, memoryPreamble } from "./memory.js";
 import { loadMcpTools, type McpServerSpec } from "./mcp-bridge.js";
 import { resolveMode } from "./mode.js";
@@ -62,6 +64,8 @@ async function main() {
   const tools: Tool[] = [
     ...desktopTools,
     ...assistantTools,
+    ...systemTools,
+    ...mediaTools,
     ...(MEMORY_ON ? memoryTools : []),
     ...mcpTools,
   ];
