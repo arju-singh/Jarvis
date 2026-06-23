@@ -17,6 +17,8 @@ import { desktopTools } from "./tools/desktop.js";
 import { assistantTools } from "./tools/assistant.js";
 import { systemTools } from "./tools/system.js";
 import { mediaTools } from "./tools/media.js";
+import { browserTools } from "./tools/browser.js";
+import { documentTools } from "./tools/documents.js";
 import { memoryTools, memoryPreamble } from "./memory.js";
 import { loadMcpTools, type McpServerSpec } from "./mcp-bridge.js";
 import { resolveMode } from "./mode.js";
@@ -31,8 +33,16 @@ const MEMORY_ON = /^(1|true|on|yes)$/i.test(process.env.JARVIS_MEMORY ?? "");
 const SYSTEM = `You are Jarvis, ${process.env.JARVIS_USER ?? "the user"}'s personal voice assistant.
 Your replies are SPOKEN aloud, so keep them short, natural and conversational — no markdown, no lists, no code blocks. You may answer in Hinglish if the user speaks that way.
 You can control the desktop, manage assistant tasks, and operate the user's own products through tools.
+
+TOOL USE IS MANDATORY — never simulate, guess, or claim you "can't" do something a tool covers. Always call the tool, then report its real result:
+- Reading a file/document (PDF, Word, Excel, CSV, text) → call read_document with the path. Never say a file is missing without trying.
+- Opening or scraping a web page, prices, listings, dynamic sites → call browse_web. For a plain keyword lookup → web_search.
+- System settings (volume, brightness, dark mode, wifi, lock, sleep) → call system_control. Screenshot → take_screenshot.
+- A YouTube video's content → call youtube_transcript. Weather → get_weather. Time/date → get_datetime. Apps → open_app.
+Extract the tool's path/URL/query from what the user said; if unsure of a file path, assume it is relative to the working directory and try it.
+
 Before any destructive shell command, state exactly what it will do and ask the user to confirm out loud; only run it via run_shell_confirmed after they say yes.
-If a tool fails, tell the user plainly what failed. Never invent results.`.trim();
+If a tool fails, tell the user plainly what the tool reported. Never invent results.`.trim();
 
 /** System prompt, recomputed each turn so freshly-remembered facts apply immediately. */
 function systemPrompt(): string {
@@ -66,6 +76,8 @@ async function main() {
     ...assistantTools,
     ...systemTools,
     ...mediaTools,
+    ...browserTools,
+    ...documentTools,
     ...(MEMORY_ON ? memoryTools : []),
     ...mcpTools,
   ];
@@ -80,6 +92,8 @@ async function main() {
 
   const app = express();
   app.use(express.json());
+  // Serve the web chat UI at http://127.0.0.1:PORT/ (public/index.html).
+  app.use(express.static(new URL("./public", import.meta.url).pathname));
 
   app.post("/turn", async (req, res) => {
     const text = req.body?.text;
