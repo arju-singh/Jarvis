@@ -1,0 +1,14 @@
+# Jarvis Python tools MCP server. Install into the project venv:
+#   python3.12 -m venv .venv
+#   ./.venv/bin/pip install -r mcp-servers/pytools/requirements.txt
+mcp>=1.0
+ddgs>=9.0                 # keyless DuckDuckGo search (replaces duckduckgo-search)
+requests>=2.31
+beautifulsoup4>=4.12
+youtube-transcript-api>=0.6
+pyperclip>=1.8
+pyautogui>=0.9.54         # input automation — needs Accessibility permission on macOS
+psutil>=5.9
+# Cross-platform extras also installed for future tools:
+#   pillow numpy mss send2trash sounddevice pyaudio opencv-python playwright pygetwindow
+# Windows-only (NOT installable on macOS): pycaw comtypes win10toast pywinauto

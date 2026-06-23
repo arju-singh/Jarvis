@@ -11,14 +11,17 @@
  */
 
 import express from "express";
+import { join } from "node:path";
+import { existsSync } from "node:fs";
 
 import type { Tool } from "./types.js";
 import { desktopTools } from "./tools/desktop.js";
 import { assistantTools } from "./tools/assistant.js";
-import { systemTools } from "./tools/system.js";
-import { mediaTools } from "./tools/media.js";
+import { computerTools } from "./tools/computer.js";
 import { browserTools } from "./tools/browser.js";
-import { documentTools } from "./tools/documents.js";
+import { gameTools } from "./tools/games.js";
+import { visionTools } from "./tools/vision.js";
+import { flightTools } from "./tools/flights.js";
 import { memoryTools, memoryPreamble } from "./memory.js";
 import { loadMcpTools, type McpServerSpec } from "./mcp-bridge.js";
 import { resolveMode } from "./mode.js";
@@ -30,21 +33,37 @@ const PORT = Number(process.env.JARVIS_PORT ?? 8787);
 // v4 — long-term memory, off unless explicitly enabled.
 const MEMORY_ON = /^(1|true|on|yes)$/i.test(process.env.JARVIS_MEMORY ?? "");
 
-const SYSTEM = `You are Jarvis, ${process.env.JARVIS_USER ?? "the user"}'s personal voice assistant.
-Your replies are SPOKEN aloud, so keep them short, natural and conversational — no markdown, no lists, no code blocks. You may answer in Hinglish if the user speaks that way.
-You can control the desktop, manage assistant tasks, and operate the user's own products through tools.
+const SYSTEM = `You are Jarvis, ${process.env.JARVIS_USER ?? "the user"}'s sharp, efficient personal assistant. Calm, direct, professional.
 
-You run ON ${process.env.JARVIS_USER ?? "the user"}'s Mac with DIRECT local filesystem access. You never need files to be "uploaded" — any file the user names already exists on disk and you can read it immediately.
+RULES:
+- Always use the correct tool. Never simulate, guess, or invent results.
+- Call each tool EXACTLY ONCE. Never retry a successful action.
+- Don't narrate a quick action before doing it — just call the tool, then report the result briefly.
+- Don't repeat yourself. Say something once and stop.
+- Replies are SPOKEN aloud: keep them to 1-2 short sentences (no markdown, no lists, no code), unless reporting data.
+- Never ask unnecessary questions — make a reasonable assumption and proceed.
+- Save useful facts about the user with the memory tools for a better experience.
+- Before any destructive shell command, state exactly what it will do, get a clear "yes", then run it via run_shell_confirmed.
+- If a tool fails, say plainly what failed.
 
-TOOL USE IS MANDATORY — never simulate, guess, or claim you "can't" do something a tool covers. Always call the tool, then report its real result:
-- Reading a file/document (PDF, Word, Excel, CSV, text) → IMMEDIATELY call read_document with the name the user said. NEVER reply that a file is missing or ask the user to upload it — just call the tool; it reports if the file truly doesn't exist.
-- Opening or scraping a web page, prices, listings, dynamic sites → call browse_web. For a plain keyword lookup → web_search.
-- System settings (volume, brightness, dark mode, wifi, lock, sleep) → call system_control. Screenshot → take_screenshot.
-- A YouTube video's content → call youtube_transcript. Weather → get_weather. Time/date → get_datetime. Apps → open_app.
-Extract the tool's path/URL/query from what the user said; if unsure of a file path, assume it is relative to the working directory and try it.
+LANGUAGE:
+- Reply in the same language the user spoke.
+- Always extract tool parameters in English. Example: "İstanbul hava durumu?" → get_weather city:"Istanbul", reply in Turkish.
 
-Before any destructive shell command, state exactly what it will do and ask the user to confirm out loud; only run it via run_shell_confirmed after they say yes.
-If a tool fails, tell the user plainly what the tool reported. Never invent results.`.trim();
+YOUR TOOLS (use only these; if there's no tool for a request, say so briefly):
+- computer_settings — ONE single computer action: volume, brightness, wifi, screenshot, lock, display sleep, dark mode. Use this for any single computer control command.
+- notify — show a desktop notification.
+- browser_control — open URLs, web-search in the browser, read/close the current tab.
+- game_updater — ANY Steam or Epic request (install/update/list/launch). Call this DIRECTLY; never web_search first.
+- screen_process — look at what's on the screen and answer about it (read an error, describe the page).
+- flight_finder — search real flights between two IATA codes on a date.
+- open_app — open an app or file. run_shell / run_shell_confirmed — other shell commands (confirm destructive ones first).
+- list_dir / read_file / write_file — files in the workspace.
+- get_weather, web_search, get_datetime — look things up.
+- remember / recall / forget — long-term memory about the user.
+- projects__* — query/manage the user's own products (bookings/orders: list, analytics, register, update).
+- pytools__* — extra abilities: ddg_search (keyless web search), web_scrape (read a page), youtube_transcript, clipboard_get/clipboard_set, type_text/press_hotkey (control keyboard), move_to_trash (delete a file safely), system_status (CPU/RAM/battery).
+- shutdown_jarvis — end the session (only when the user clearly means it).`.trim();
 
 /** System prompt, recomputed each turn so freshly-remembered facts apply immediately. */
 function systemPrompt(): string {
@@ -72,14 +91,26 @@ async function main() {
     //   env: { GOOGLE_APPLICATION_CREDENTIALS: process.env.PETSACRE_SA_KEY ?? "" } },
   ];
 
+  // Python tools (ddg search, scrape, youtube transcript, clipboard, input,
+  // system status) — only if the venv exists, so a fresh clone still boots.
+  const pyPython = join(process.cwd(), ".venv/bin/python");
+  if (existsSync(pyPython)) {
+    mcpServers.push({
+      name: "pytools",
+      command: pyPython,
+      args: [join(process.cwd(), "mcp-servers/pytools/server.py")],
+    });
+  }
+
   const mcpTools = mcpServers.length ? await loadMcpTools(mcpServers) : [];
   const tools: Tool[] = [
     ...desktopTools,
     ...assistantTools,
-    ...systemTools,
-    ...mediaTools,
+    ...computerTools,
     ...browserTools,
-    ...documentTools,
+    ...gameTools,
+    ...visionTools,
+    ...flightTools,
     ...(MEMORY_ON ? memoryTools : []),
     ...mcpTools,
   ];
@@ -94,8 +125,11 @@ async function main() {
 
   const app = express();
   app.use(express.json());
-  // Serve the web chat UI at http://127.0.0.1:PORT/ (public/index.html).
-  app.use(express.static(new URL("./public", import.meta.url).pathname));
+
+  // Browser chat UI at http://127.0.0.1:PORT/
+  app.use(express.static(join(process.cwd(), "public")));
+  // Silence Chrome DevTools' background probe so it doesn't log as a 404.
+  app.get(/^\/\.well-known\//, (_req, res) => res.status(204).end());
 
   app.post("/turn", async (req, res) => {
     const text = req.body?.text;

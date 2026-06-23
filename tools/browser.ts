@@ -1,62 +1,92 @@
 /**
- * Browser tool — macOS/Node port of Mark-XXXIX-OR's `browser_control` (and the
- * scraping half of `flight_finder`). Uses Playwright + Chromium to load a page,
- * render its JavaScript, and return the visible text so the brain can read pages
- * that a plain HTTP fetch can't (SPAs, search results, dynamic content).
+ * Browser control (macOS, AppleScript).
  *
- * One headless browser is launched lazily and reused; a fresh page is opened and
- * closed per call. No fallbacks: navigation/extraction failures throw.
+ * Drives Safari (default) or Chrome — open URLs, web-search, read the current
+ * tab, open/close tabs. Set JARVIS_BROWSER="Google Chrome" to use Chrome.
+ *
+ * Real automation via osascript. Fails loud if the browser/AppleScript errors.
  */
 
-import { chromium, type Browser } from "playwright";
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import type { Tool } from "../types.js";
 
-let browser: Browser | null = null;
+const run = promisify(execFile);
+const BROWSER = process.env.JARVIS_BROWSER ?? "Safari";
+const isChrome = /chrome/i.test(BROWSER);
 
-async function getBrowser(): Promise<Browser> {
-  if (browser && browser.isConnected()) return browser;
-  browser = await chromium.launch({ headless: true });
-  return browser;
+async function osa(script: string): Promise<string> {
+  try {
+    const { stdout } = await run("osascript", ["-e", script], { timeout: 15_000 });
+    return stdout.trim();
+  } catch (err) {
+    throw new Error((err as Error).message);
+  }
+}
+
+// Chrome uses "active tab"/"window", Safari uses "current tab"/"document".
+const getUrl = isChrome
+  ? `tell application "Google Chrome" to get URL of active tab of front window`
+  : `tell application "Safari" to get URL of current tab of front window`;
+const getTitle = isChrome
+  ? `tell application "Google Chrome" to get title of active tab of front window`
+  : `tell application "Safari" to get name of current tab of front window`;
+
+function openUrlScript(url: string): string {
+  const u = url.replace(/"/g, '\\"');
+  return isChrome
+    ? `tell application "Google Chrome"\nactivate\nopen location "${u}"\nend tell`
+    : `tell application "Safari"\nactivate\nopen location "${u}"\nend tell`;
+}
+
+function normalizeUrl(input: string): string {
+  const s = input.trim();
+  if (/^https?:\/\//i.test(s)) return s;
+  if (/^[\w-]+(\.[\w-]+)+/.test(s)) return `https://${s}`; // looks like a domain
+  return `https://www.google.com/search?q=${encodeURIComponent(s)}`; // otherwise search
 }
 
 export const browserTools: Tool[] = [
   {
-    name: "browse_web",
+    name: "browser_control",
     description:
-      "Open a web page in a real (headless) browser, let its JavaScript render, and return " +
-      "the visible text. Use for pages a simple fetch can't read — dynamic sites, search " +
-      "results, dashboards, prices, listings. Input the full URL. For a plain keyword search " +
-      "of the web, prefer web_search instead.",
+      `Control the web browser (${BROWSER}). Actions: open (value = URL or search terms), ` +
+      `search (value = query), current_url, current_title, close_tab. Opening a non-URL searches Google.`,
     input_schema: {
       type: "object",
       properties: {
-        url: { type: "string", description: "Full URL to open (must start with http/https)." },
-        wait_for: {
-          type: "string",
-          description: "Optional CSS selector to wait for before reading (for slow/dynamic pages).",
-        },
+        action: { type: "string", enum: ["open", "search", "current_url", "current_title", "close_tab"] },
+        value: { type: "string", description: "URL or search query for open/search." },
       },
-      required: ["url"],
+      required: ["action"],
     },
-    run: async ({ url, wait_for }: { url: string; wait_for?: string }) => {
-      if (!/^https?:\/\//i.test(url)) throw new Error("url must start with http:// or https://");
-      const b = await getBrowser();
-      const page = await b.newPage({
-        userAgent:
-          "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120 Safari/537.36",
-      });
-      try {
-        await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 });
-        if (wait_for) await page.waitForSelector(wait_for, { timeout: 15_000 });
-        else await page.waitForTimeout(1200); // let late JS settle
-        const title = await page.title();
-        const text = (await page.evaluate(() => document.body?.innerText ?? "")).replace(/\n{3,}/g, "\n\n").trim();
-        if (!text) throw new Error(`Page loaded but had no visible text: ${url}`);
-        const LIMIT = 12_000;
-        const body = text.length > LIMIT ? `${text.slice(0, LIMIT)}\n\n[page text truncated at ${LIMIT} chars]` : text;
-        return `# ${title}\n${url}\n\n${body}`;
-      } finally {
-        await page.close();
+    run: async ({ action, value }: { action: string; value?: string }) => {
+      switch (action) {
+        case "open": {
+          if (!value) throw new Error("'value' (URL or terms) required for open.");
+          const url = normalizeUrl(value);
+          await osa(openUrlScript(url));
+          return `Opened ${url}`;
+        }
+        case "search": {
+          if (!value) throw new Error("'value' (query) required for search.");
+          const url = `https://www.google.com/search?q=${encodeURIComponent(value)}`;
+          await osa(openUrlScript(url));
+          return `Searching for "${value}".`;
+        }
+        case "current_url":
+          return (await osa(getUrl)) || "(no open tab)";
+        case "current_title":
+          return (await osa(getTitle)) || "(no open tab)";
+        case "close_tab": {
+          const script = isChrome
+            ? `tell application "Google Chrome" to close active tab of front window`
+            : `tell application "Safari" to close current tab of front window`;
+          await osa(script);
+          return "Closed the current tab.";
+        }
+        default:
+          throw new Error(`Unknown action "${action}".`);
       }
     },
   },
