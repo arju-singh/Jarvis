@@ -1,0 +1,31 @@
+{
+  "gemini_api_key": "AIza...your-free-gemini-key...",
+  "openrouter_api_key": "sk-or-...your-free-openrouter-key...",
+  "os_system": "mac",
+
+  "content_agent": {
+    "clips_dir": "content/clips",
+    "post_time": "10:00",
+    "platforms": ["youtube", "instagram", "twitter"],
+
+    "public_base_url": "",
+
+    "youtube": {
+      "client_id": "",
+      "client_secret": "",
+      "refresh_token": "",
+      "category_id": "22",
+      "privacy": "public"
+    },
+    "instagram": {
+      "ig_user_id": "",
+      "access_token": ""
+    },
+    "twitter": {
+      "api_key": "",
+      "api_secret": "",
+      "access_token": "",
+      "access_secret": ""
+    }
+  }
+}

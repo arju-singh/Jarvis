@@ -18,3 +18,9 @@ __pycache__/
 .claude/
 **/api_keys.json
 .venv/
+
+# content agent: ignore media + runtime state, keep the folder
+content/clips/*
+!content/clips/.gitkeep
+content/edited/
+content/ledger.json

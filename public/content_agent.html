@@ -1,0 +1,356 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- CSRF token injected per-process by content_agent_server.py at serve time.
+     Cross-origin pages cannot read it, so they cannot forge API requests. -->
+<meta name="csrf-token" content="__CSRF_TOKEN__" />
+<title>MARK XXXIX-OR · Content Agent</title>
+<style>
+  :root{
+    --bg:#00060a; --panel:#010d14; --panel2:#02131d; --border:#0d3347;
+    --border-b:#1a5c7a; --pri:#00d4ff; --pri-dim:#007a99; --pri-gho:#001f2e;
+    --acc:#ff6b00; --acc2:#ffcc00; --green:#00ff88; --red:#ff3b5c; --text:#cfeffb; --dim:#5b8499;
+  }
+  *{box-sizing:border-box;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:
+      radial-gradient(1200px 600px at 70% -10%, #00253a55, transparent),
+      radial-gradient(800px 500px at 0% 110%, #0a1f2e55, transparent),
+      var(--bg);
+    color:var(--text); font:13px/1.5 ui-monospace,"SF Mono",Menlo,Consolas,monospace;
+    letter-spacing:.4px; min-height:100vh; overflow-x:hidden;
+  }
+  body::before{ /* scanlines */
+    content:""; position:fixed; inset:0; pointer-events:none; z-index:9;
+    background:repeating-linear-gradient(0deg,#00d4ff06 0,#00d4ff06 1px,transparent 1px,transparent 3px);
+    opacity:.5;
+  }
+  .wrap{max-width:1180px; margin:0 auto; padding:18px 22px 40px;}
+  h1,h2,h3{margin:0; font-weight:600; text-transform:uppercase; letter-spacing:2px;}
+
+  /* header */
+  header{display:flex; align-items:center; gap:16px; padding:14px 18px; margin-bottom:18px;
+    background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--border); border-radius:10px; position:relative; overflow:hidden;}
+  header::after{content:""; position:absolute; left:0; right:0; bottom:0; height:1px;
+    background:linear-gradient(90deg,transparent,var(--pri),transparent); opacity:.6;}
+  .reactor{width:34px;height:34px;border-radius:50%;flex:0 0 auto;position:relative;
+    background:radial-gradient(circle at 50% 50%,#aef6ff,var(--pri) 38%,#003a4f 70%,#001019);
+    box-shadow:0 0 18px var(--pri),inset 0 0 8px #003a4f; animation:pulse 2.4s infinite;}
+  .reactor::before{content:"";position:absolute;inset:6px;border-radius:50%;
+    border:2px solid #aef6ff88;}
+  @keyframes pulse{0%,100%{box-shadow:0 0 14px var(--pri),inset 0 0 8px #003a4f;}
+    50%{box-shadow:0 0 26px var(--pri),0 0 8px var(--pri),inset 0 0 10px #004a63;}}
+  header h1{font-size:16px;color:#eafcff;}
+  header .sub{color:var(--dim); font-size:11px; letter-spacing:3px;}
+  header .spacer{flex:1;}
+  .stat{display:flex;flex-direction:column;align-items:flex-end;line-height:1.3;}
+  .stat b{color:var(--pri);font-size:15px;}
+  .stat span{color:var(--dim);font-size:10px;letter-spacing:2px;}
+  .link{margin-left:8px;width:9px;height:9px;border-radius:50%;background:var(--red);
+    box-shadow:0 0 8px var(--red);} .link.ok{background:var(--green);box-shadow:0 0 8px var(--green);}
+
+  .grid{display:grid; grid-template-columns:1.4fr 1fr; gap:16px;}
+  @media(max-width:880px){.grid{grid-template-columns:1fr;}}
+  .panel{background:linear-gradient(180deg,var(--panel2),var(--panel));
+    border:1px solid var(--border); border-radius:10px; padding:16px 18px; position:relative;}
+  .panel > h3{font-size:11px;color:var(--pri);margin-bottom:14px;display:flex;align-items:center;gap:8px;}
+  .panel > h3::before{content:"";width:6px;height:6px;background:var(--pri);transform:rotate(45deg);box-shadow:0 0 8px var(--pri);}
+  .corner{position:absolute;width:10px;height:10px;border:1px solid var(--border-b);}
+  .corner.tl{top:6px;left:6px;border-right:0;border-bottom:0;}
+  .corner.tr{top:6px;right:6px;border-left:0;border-bottom:0;}
+  .corner.bl{bottom:6px;left:6px;border-right:0;border-top:0;}
+  .corner.br{bottom:6px;right:6px;border-left:0;border-top:0;}
+
+  /* pipeline */
+  .pipe{display:flex;align-items:center;justify-content:space-between;gap:6px;margin:6px 0 4px;}
+  .node{flex:1;text-align:center;padding:12px 4px;border:1px solid var(--border);border-radius:8px;
+    background:var(--pri-gho);transition:.3s;position:relative;}
+  .node .ic{font-size:18px;}
+  .node .nm{font-size:9px;color:var(--dim);letter-spacing:2px;margin-top:4px;}
+  .node.on{border-color:var(--pri);background:#00263a;box-shadow:0 0 16px #00d4ff55;}
+  .node.on .nm{color:var(--pri);}
+  .arrow{color:var(--border-b);font-size:14px;flex:0 0 auto;}
+  .node.on .ic{animation:blink .8s infinite;}
+  @keyframes blink{50%{opacity:.4;}}
+
+  /* chips */
+  .chips{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 14px;}
+  .chip{display:flex;align-items:center;gap:8px;padding:8px 12px;border:1px solid var(--border);
+    border-radius:20px;cursor:pointer;user-select:none;background:var(--panel);transition:.2s;}
+  .chip:hover{border-color:var(--border-b);}
+  .chip.sel{border-color:var(--pri);background:#00202f;box-shadow:0 0 12px #00d4ff33;}
+  .chip .pf{font-size:12px;color:var(--text);}
+  .badge{font-size:8px;letter-spacing:1px;padding:2px 6px;border-radius:10px;text-transform:uppercase;}
+  .badge.real{background:#00321c;color:var(--green);} .badge.dry{background:#3a2600;color:var(--acc2);}
+  .badge.connect{cursor:pointer;border:1px solid #5a3a00;font:inherit;letter-spacing:1px;}
+  .badge.connect:hover{background:#5a3a00;color:#ffe08a;box-shadow:0 0 8px #ff6b0044;}
+  #authMsg{font-size:11px;color:var(--acc2);min-height:14px;margin:-2px 0 12px;white-space:pre-wrap;}
+  #authMsg.busy{color:var(--pri);}
+
+  input,select{background:#00121b;border:1px solid var(--border);color:var(--text);
+    border-radius:7px;padding:9px 11px;font:inherit;outline:none;}
+  input:focus{border-color:var(--pri);box-shadow:0 0 10px #00d4ff33;}
+  .row{display:flex;gap:10px;align-items:center;margin-bottom:12px;flex-wrap:wrap;}
+  .row label{font-size:10px;color:var(--dim);letter-spacing:2px;min-width:54px;}
+  .row input{flex:1;}
+
+  button{font:inherit;letter-spacing:2px;text-transform:uppercase;cursor:pointer;border-radius:8px;
+    border:1px solid var(--pri-dim);background:#00202f;color:var(--pri);padding:11px 16px;transition:.2s;}
+  button:hover{background:#003147;box-shadow:0 0 14px #00d4ff44;}
+  button:disabled{opacity:.4;cursor:not-allowed;}
+  button.primary{background:linear-gradient(180deg,#00b4d8,#0077a3);color:#001218;border-color:#19e0ff;
+    font-weight:700;box-shadow:0 0 20px #00d4ff55;width:100%;padding:15px;font-size:14px;}
+  button.primary:hover{box-shadow:0 0 30px #00d4ff88;}
+  button.warn{border-color:var(--acc);color:var(--acc);background:#2a1400;}
+  button.ghost{background:transparent;}
+
+  .pill{display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:14px;font-size:10px;
+    letter-spacing:2px;border:1px solid var(--border);color:var(--dim);}
+  .pill .d{width:7px;height:7px;border-radius:50%;background:var(--dim);}
+  .pill.on{color:var(--green);border-color:#0a4a30;} .pill.on .d{background:var(--green);box-shadow:0 0 6px var(--green);}
+
+  .list{max-height:200px;overflow:auto;display:flex;flex-direction:column;gap:6px;}
+  .clip{display:flex;align-items:center;gap:8px;padding:8px 10px;border:1px solid var(--border);
+    border-radius:6px;background:var(--panel);font-size:11px;}
+  .clip .dot{width:6px;height:6px;border-radius:50%;background:var(--pri);box-shadow:0 0 6px var(--pri);}
+  .empty{color:var(--dim);font-size:11px;padding:14px 4px;text-align:center;border:1px dashed var(--border);border-radius:6px;}
+
+  .post{border:1px solid var(--border);border-radius:7px;padding:10px;margin-bottom:8px;background:var(--panel);}
+  .post .top{display:flex;justify-content:space-between;font-size:11px;color:#eafcff;margin-bottom:6px;}
+  .post .when{color:var(--dim);font-size:9px;}
+  .res{display:flex;flex-wrap:wrap;gap:6px;}
+  .res span{font-size:9px;padding:3px 7px;border-radius:5px;letter-spacing:1px;}
+  .r-ok{background:#00321c;color:var(--green);} .r-dry{background:#3a2600;color:var(--acc2);} .r-fail{background:#3a0011;color:var(--red);}
+
+  .log{background:#00080d;border:1px solid var(--border);border-radius:8px;padding:10px;height:170px;
+    overflow:auto;font-size:11px;line-height:1.7;}
+  .log .l{white-space:pre-wrap;} .log .INFO{color:var(--pri);} .log .WARNING{color:var(--acc2);} .log .ERROR{color:var(--red);}
+  .log .l .tg{color:var(--dim);}
+  .ready{display:flex;gap:14px;flex-wrap:wrap;margin-top:6px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="reactor"></div>
+    <div>
+      <h1>MARK XXXIX-OR</h1>
+      <div class="sub">CONTENT AGENT · AUTONOMOUS DISTRIBUTION</div>
+    </div>
+    <div class="spacer"></div>
+    <div class="stat"><b id="postedCount">—</b><span>CLIPS POSTED</span></div>
+    <div class="stat" style="margin-left:18px"><b id="queueCount">—</b><span>IN QUEUE</span></div>
+    <div class="link" id="link" title="link status"></div>
+  </header>
+
+  <div class="grid">
+    <!-- LEFT -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+
+      <div class="panel">
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+        <h3>Pipeline</h3>
+        <div class="pipe" id="pipe">
+          <div class="node" data-s="source"><div class="ic">🎞️</div><div class="nm">SOURCE</div></div>
+          <div class="arrow">▸</div>
+          <div class="node" data-s="edit"><div class="ic">✂️</div><div class="nm">EDIT</div></div>
+          <div class="arrow">▸</div>
+          <div class="node" data-s="caption"><div class="ic">✍️</div><div class="nm">CAPTION</div></div>
+          <div class="arrow">▸</div>
+          <div class="node" data-s="post"><div class="ic">📡</div><div class="nm">POST</div></div>
+          <div class="arrow">▸</div>
+          <div class="node" data-s="ledger"><div class="ic">🗄️</div><div class="nm">LEDGER</div></div>
+        </div>
+        <div class="ready" id="ready"></div>
+      </div>
+
+      <div class="panel">
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+        <h3>Launch</h3>
+        <div class="chips" id="chips"></div>
+        <div id="authMsg"></div>
+        <div class="row"><label>TOPIC</label><input id="topic" placeholder="optional theme to steer the caption…"></div>
+        <button class="primary" id="postBtn" onclick="post()">▶ POST NEXT CLIP NOW</button>
+        <div id="runMsg" style="margin-top:10px;color:var(--dim);font-size:11px;white-space:pre-wrap;"></div>
+      </div>
+
+      <div class="panel">
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+        <h3>Daily Schedule</h3>
+        <div class="row">
+          <label>TIME</label><input id="schedTime" type="time" value="10:00" style="flex:0 0 120px;">
+          <span class="pill" id="schedPill"><span class="d"></span><span id="schedTxt">OFFLINE</span></span>
+        </div>
+        <div class="row">
+          <button onclick="schedule()">◷ SCHEDULE DAILY</button>
+          <button class="warn ghost" onclick="stopSched()">■ STOP</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- RIGHT -->
+    <div style="display:flex;flex-direction:column;gap:16px;">
+      <div class="panel">
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+        <h3>Clip Queue</h3>
+        <div class="list" id="queue"></div>
+        <div class="empty" id="clipsHint" style="margin-top:8px;display:none;"></div>
+      </div>
+
+      <div class="panel">
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+        <h3>Recent Posts</h3>
+        <div id="recent"></div>
+      </div>
+
+      <div class="panel">
+        <span class="corner tl"></span><span class="corner tr"></span><span class="corner bl"></span><span class="corner br"></span>
+        <h3>Live Telemetry</h3>
+        <div class="log" id="log"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PLATFORMS = ["youtube","instagram","twitter"];
+const ICON = {youtube:"▶ YouTube", instagram:"◎ Instagram", twitter:"✕ Twitter"};
+let selected = new Set(PLATFORMS);
+let readiness = {};
+
+// Session/CSRF token — required by the server on every /api call.
+const CSRF = document.querySelector('meta[name="csrf-token"]').content;
+// Thin fetch wrapper that always attaches the token (and JSON content-type for bodies).
+function api(path, opts={}){
+  const headers = Object.assign({'X-CSRF-Token': CSRF}, opts.headers || {});
+  if(opts.body) headers['Content-Type'] = 'application/json';
+  return fetch(path, Object.assign({}, opts, {headers}));
+}
+
+function chipHtml(p){
+  const real = readiness[p];
+  const on = selected.has(p) ? "sel" : "";
+  // Connected → LIVE badge. Not connected → a CONNECT button that runs OAuth.
+  const badge = real
+    ? `<span class="badge real">LIVE</span>`
+    : `<button class="badge dry connect" title="Authorize ${p} via your browser"
+         onclick="event.stopPropagation();connect('${p}')">CONNECT</button>`;
+  return `<div class="chip ${on}" onclick="toggle('${p}')"><span class="pf">${ICON[p]}</span>${badge}</div>`;
+}
+function renderChips(){ document.getElementById('chips').innerHTML = PLATFORMS.map(chipHtml).join(''); }
+function toggle(p){ selected.has(p)?selected.delete(p):selected.add(p); renderChips(); }
+
+function setAuthMsg(txt, busy){
+  const el = document.getElementById('authMsg');
+  el.textContent = txt || ''; el.classList.toggle('busy', !!busy);
+}
+async function connect(p){
+  setAuthMsg(`› opening ${p} authorization in your browser…`, true);
+  try{
+    const r = await (await api('/api/auth',{method:'POST',body:JSON.stringify({platform:p})})).json();
+    if(!r.ok) setAuthMsg(r.error || r.msg, false);
+  }catch(e){ setAuthMsg('connect failed: '+e, false); }
+  refresh();
+}
+
+function setStage(active, stage){
+  document.querySelectorAll('.node').forEach(n=>n.classList.remove('on'));
+  if(!active) return;
+  // light up post stage during a run as a simple liveness cue
+  ['source','edit','caption','post','ledger'].forEach(s=>{
+    document.querySelector(`.node[data-s="${s}"]`).classList.add('on');
+  });
+}
+
+function classify(msg){
+  const m=(msg||'').toLowerCase();
+  if(m.includes('ok')&&!m.includes('dry')) return 'r-ok';
+  if(m.includes('dry-run')) return 'r-dry';
+  if(m.includes('fail')) return 'r-fail';
+  return 'r-dry';
+}
+
+async function refresh(){
+  try{
+    const s = await (await api('/api/state')).json();
+    document.getElementById('link').classList.add('ok');
+    readiness = s.readiness||{}; renderChips();
+
+    document.getElementById('postedCount').textContent = s.posted;
+    document.getElementById('queueCount').textContent = s.queue.length;
+
+    // readiness strip
+    const rd = s.readiness||{};
+    document.getElementById('ready').innerHTML =
+      [['ffmpeg','EDITOR'],['captions','AI CAPTIONS']].map(([k,lbl])=>
+        `<span class="pill ${rd[k]?'on':''}"><span class="d"></span>${lbl} ${rd[k]?'ONLINE':'OFFLINE'}</span>`).join('');
+
+    // schedule
+    const sc = s.schedule||{};
+    const pill = document.getElementById('schedPill');
+    pill.classList.toggle('on', !!sc.running);
+    document.getElementById('schedTxt').textContent = sc.running ? `DAILY · ${sc.time}` : 'OFFLINE';
+
+    // auth (OAuth connect) state — show progress + result, don't stomp a fresh click
+    const au = s.auth||{};
+    if(au.active) setAuthMsg(`› connecting ${au.platform}… complete it in the browser tab`, true);
+    else if(au.last) setAuthMsg(au.last, false);
+
+    // run state
+    const run = s.run||{};
+    setStage(run.active, run.stage);
+    const btn = document.getElementById('postBtn');
+    btn.disabled = run.active;
+    btn.textContent = run.active ? '◌ RUNNING…' : '▶ POST NEXT CLIP NOW';
+    if(run.last) document.getElementById('runMsg').textContent = run.last;
+
+    // queue
+    const q = document.getElementById('queue');
+    if(s.queue.length){
+      q.innerHTML = s.queue.map(c=>`<div class="clip"><span class="dot"></span>${c}</div>`).join('');
+      document.getElementById('clipsHint').style.display='none';
+    } else {
+      q.innerHTML='';
+      const h=document.getElementById('clipsHint');
+      h.style.display='block'; h.textContent='Drop video clips into '+s.clips_dir;
+    }
+
+    // recent
+    document.getElementById('recent').innerHTML = (s.recent||[]).map(r=>{
+      const res = Object.entries(r.platforms||{}).map(([p,m])=>
+        `<span class="${classify(m)}">${p}: ${m.replace(/^[a-z]+ /i,'')}</span>`).join('');
+      return `<div class="post"><div class="top"><span>${r.clip}</span><span class="when">${(r.at||'').replace('T',' ')}</span></div><div class="res">${res||'<span class="r-dry">no result</span>'}</div></div>`;
+    }).join('') || '<div class="empty">No posts yet — runs will appear here.</div>';
+
+    // log
+    const log = document.getElementById('log');
+    log.innerHTML = (s.logs||[]).map(l=>`<div class="l ${l.level}"><span class="tg">›</span> ${l.msg}</div>`).join('');
+    log.scrollTop = log.scrollHeight;
+  }catch(e){
+    document.getElementById('link').classList.remove('ok');
+  }
+}
+
+async function post(){
+  document.getElementById('runMsg').textContent='› dispatching…';
+  const r = await (await api('/api/post',{method:'POST',
+    body:JSON.stringify({platforms:[...selected], topic:document.getElementById('topic').value})})).json();
+  if(!r.ok) document.getElementById('runMsg').textContent = r.error || r.msg;
+  refresh();
+}
+async function schedule(){
+  await api('/api/schedule',{method:'POST',
+    body:JSON.stringify({time:document.getElementById('schedTime').value, platforms:[...selected]})});
+  refresh();
+}
+async function stopSched(){ await api('/api/stop',{method:'POST'}); refresh(); }
+
+renderChips(); refresh(); setInterval(refresh, 1500);
+</script>
+</body>
+</html>

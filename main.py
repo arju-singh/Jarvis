@@ -31,6 +31,7 @@ from actions.dev_agent         import dev_agent
 from actions.web_search        import web_search as web_search_action
 from actions.computer_control  import computer_control
 from actions.game_updater      import game_updater
+from actions.content_agent     import content_agent
 
 
 def get_base_dir():
@@ -50,8 +51,9 @@ CHUNK_SIZE          = 1024
 
 
 def _get_api_key() -> str:
-    with open(API_CONFIG_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)["gemini_api_key"]
+    # Env-first (GEMINI_API_KEY), then config/api_keys.json. See config.get_secret.
+    from config import get_secret
+    return get_secret("gemini")
 
 
 def _load_system_prompt() -> str:
@@ -381,6 +383,28 @@ TOOL_DECLARATIONS = [
         }
     },
     {
+        "name": "content_agent",
+        "description": (
+            "Autonomous content/marketing agent. Picks the next unused clip from the local "
+            "content/clips folder, edits it to a vertical short, writes a caption, and posts to "
+            "YouTube, Instagram, and X/Twitter. Use to post now, schedule daily posting, stop the "
+            "schedule, or check status. Posts for real when platform credentials are configured in "
+            "config/api_keys.json; otherwise reports a dry-run."
+        ),
+        "parameters": {
+            "type": "OBJECT",
+            "properties": {
+                "action":    {"type": "STRING", "description": "post_now (default) | schedule_daily | stop_schedule | status | list_clips | dashboard (opens the Jarvis HUD) | auth (connect a platform via browser OAuth)"},
+                "platform":  {"type": "STRING", "description": "For auth: which platform to connect — youtube | twitter | instagram"},
+                "platforms": {"type": "STRING", "description": "Space/comma list: youtube instagram twitter (default: all configured)"},
+                "topic":     {"type": "STRING", "description": "Optional theme/context to steer the generated caption"},
+                "time":      {"type": "STRING", "description": "For schedule_daily: HH:MM 24h local time (default from config)"},
+                "clip":      {"type": "STRING", "description": "Optional specific clip filename in content/clips to post"},
+            },
+            "required": []
+        }
+    },
+    {
     "name": "file_processor",
     "description": (
         "Processes any file that the user has uploaded or dropped onto the interface. "
@@ -682,6 +706,10 @@ class JarvisLive:
 
             elif name == "flight_finder":
                 r = await loop.run_in_executor(None, lambda: flight_finder(parameters=args, player=self.ui))
+                result = r or "Done."
+
+            elif name == "content_agent":
+                r = await loop.run_in_executor(None, lambda: content_agent(parameters=args, player=self.ui, speak=self.speak))
                 result = r or "Done."
             elif name == "shutdown_jarvis":
                 self.ui.write_log("SYS: Shutdown requested.")

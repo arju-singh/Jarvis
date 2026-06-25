@@ -1,5 +1,15 @@
 # Jarvis
 
+> Most "AI agents" you see online are fancy UI with very little behind them —
+> impressive for ten seconds, useless the moment you ask for real work.
+>
+> Mine is different. My **content agent** has been pulling footage, editing, and
+> posting across platforms on its own, every day, for over a month. The month I
+> pointed Jarvis at my app's marketing, the app grew about **3x**.
+>
+> That's the proof: a real system doing real work. And if you're willing to
+> tinker, you can build one too.
+
 A personal voice assistant that runs **online or fully offline.**
 
 ```
@@ -103,6 +113,194 @@ curl -X POST http://127.0.0.1:8787/turn \
 
 \* Barge-in (interrupt-while-speaking) is implemented but needs real-audio
 tuning — without echo cancellation, open speakers can self-trigger. Use a headset.
+
+---
+
+# 🤖 MARK XXXIX-OR — Python / Gemini-Live app
+
+> 📺 **[Watch the full setup video on YouTube](https://youtu.be/ldvDNzwnM8k)**
+
+A second, **standalone** assistant living in this repo: a real-time voice AI that can
+hear, see, understand, and control your computer — on Windows, macOS, or Linux.
+Local execution, zero subscriptions. It is independent of the Node brain above:
+run it with **`python main.py`**. Real-time voice + tool-calling go through
+**Gemini Live**, while heavier action modules (web search, memory, flight finder,
+desktop control, and more) route their LLM calls through **OpenRouter** free-tier
+models for a much higher effective request limit at no cost.
+
+## ✨ Overview
+
+MARK XXXIX-OR is the pinnacle of the Jarvis series, bridging the operating system
+and human intent. Through natural dialogue it analyzes your screen, processes
+uploaded documents, and executes complex workflows with an adaptive interface.
+
+## 🚀 Capabilities
+
+| Feature | Description |
+|---|---|
+| 🎙️ Real-time Voice | Ultra-low latency conversation in any language |
+| 🖥️ System Control | Launch apps, manage files, execute terminal commands |
+| 🧩 Autonomous Tasks | High-level planning for complex, multi-step goals |
+| 👁️ Visual Awareness | Real-time screen processing and webcam vision |
+| 🧠 Persistent Memory | Remembers your projects, preferences, and personal context |
+| ⌨️ Hybrid Input | Switch between keyboard typing and voice commands |
+
+## 🆕 What's New in XXXIX-OR
+
+- 📂 **Advanced File Handling** — drop PDFs, source code, or images in to have them analyzed, summarized, or edited.
+- 🎨 **Adaptive & Flexible UI** — resizable, responsive interface with transparency controls and customizable layouts.
+- 🐧🍎 **Refined Cross-Platform Stability** — core system actions are consistent across Windows, macOS, and Linux (Windows-only modules load behind `try/except`).
+- ⚡ **Optimized Core Engine** — faster tool-calling logic and response generation.
+- 🔀 **OpenRouter Integration** — selected action modules route through OpenRouter's free models; Gemini Live continues to handle real-time voice and tool-calling.
+
+## ⚡ Quick Start
+
+```bash
+# from the repo root
+pip install -r requirements-mark.txt   # Mark app deps (NOT requirements.txt — that's the ears)
+playwright install                     # browser engines for browse_web
+
+# add your keys (see Requirements below)
+cp config/api_keys.json.example config/api_keys.json
+$EDITOR config/api_keys.json           # paste your Gemini + OpenRouter keys, set "os_system"
+
+python main.py
 ```
-# Jarvis
-# Jarvis
+
+Or run `python setup.py`, which installs the requirements, runs `playwright install`,
+and creates `config/api_keys.json` from the example for you.
+
+> ⚠️ **Installation note:** to keep the repo lightweight, some OS-specific deps are
+> not bundled. On a `ModuleNotFoundError`, install the missing package with
+> `pip install <module_name>`. Windows users also: `pip install comtypes pycaw pywinauto win10toast`.
+
+## 📋 Requirements
+
+| Requirement | Details |
+|---|---|
+| **OS** | Windows 10/11, macOS, or Linux |
+| **Python** | 3.11 or 3.12 |
+| **Microphone** | Required for voice interaction |
+| **API keys** | Free Gemini key + free OpenRouter key, placed in `config/api_keys.json` |
+
+`config/api_keys.json` is **git-ignored** (it holds secrets) — every checkout must
+create its own from `config/api_keys.json.example`:
+
+```json
+{
+  "gemini_api_key": "AIza...",
+  "openrouter_api_key": "sk-or-...",
+  "os_system": "mac"
+}
+```
+
+- **Gemini** (free): https://aistudio.google.com/apikey
+- **OpenRouter** (free): https://openrouter.ai/keys
+- `os_system`: `"windows"` | `"mac"` | `"linux"` — drives the platform-specific control paths.
+
+## 🎬 Content Agent (the autonomous marketer)
+
+The system from the pitch above lives in [`actions/content_agent.py`](actions/content_agent.py).
+It runs an end-to-end pipeline — **source → edit → caption → post → ledger** — and can
+run itself on a daily schedule:
+
+1. **Source** — picks the next unused clip from `content/clips/` (a JSON ledger tracks
+   what's posted, so nothing repeats).
+2. **Edit** — `ffmpeg` normalises it to a 1080×1920 ≤60s vertical short (needs
+   `brew install ffmpeg` / `apt install ffmpeg`; without it, the source clip is posted as-is).
+3. **Caption** — generates title + caption + hashtags via OpenRouter (`or_client`).
+4. **Post** — real API uploads to **YouTube** (Data API v3), **Instagram** (Graph API Reels),
+   and **X/Twitter** (chunked media + v2 tweet). Each adapter posts for real when its keys are
+   set in `config/api_keys.json → content_agent`, and otherwise logs a clear **DRY-RUN**.
+5. **Ledger** — records every run to `content/ledger.json` for auditing.
+
+Drive it by voice ("post my latest clip", "schedule daily posting at 10am", "open the content
+dashboard"), as an autonomous `agent_task`, from the **Jarvis HUD dashboard**, or from the shell
+for cron / Windows Task Scheduler:
+
+```bash
+python -m actions.content_agent serve             # 🖥️  Jarvis HUD control panel → http://127.0.0.1:8799
+python -m actions.content_agent auth youtube      # 🔑 one-command browser OAuth → saves tokens (also: twitter, instagram)
+python -m actions.content_agent post              # run the pipeline once
+python -m actions.content_agent post youtube,twitter
+python -m actions.content_agent schedule          # blocking daily loop
+python -m actions.content_agent status
+```
+
+### 🔑 Going live (DRY → LIVE)
+
+Each platform shows a **DRY** badge until connected. Add the one-time app credentials you
+create at the provider to `config/api_keys.json`, then run the bootstrap — it opens your
+browser, captures the redirect on a loopback server, and writes the long-lived token back
+(file auto-hardened to `0600`). Nothing is printed; see [`actions/content_auth.py`](actions/content_auth.py).
+
+| Platform | You provide once | `auth` captures |
+|---|---|---|
+| **YouTube** | OAuth *Desktop* client → `client_id`, `client_secret` | `refresh_token` |
+| **X/Twitter** | App with OAuth1 → `api_key`, `api_secret` | `access_token`, `access_secret` |
+| **Instagram** | Short-lived user token + `app_secret` (+ `app_id`) | long-lived `access_token` (~60d) |
+
+```bash
+python -m actions.content_agent auth youtube      # → ✓ YouTube connected — posts upload for real
+```
+
+### 🖥️ The HUD
+
+`python -m actions.content_agent serve` (or saying "open the content dashboard") launches a
+Jarvis-style control panel — the same cyan-on-black HUD as the main UI — that drives the real
+pipeline: live SOURCE→EDIT→CAPTION→POST→LEDGER flow, platform chips badged **LIVE/DRY** by
+credential state, a **Post Next Clip** trigger, daily-schedule controls, the clip queue, recent
+posts (color-coded OK / dry-run / failed), and a live telemetry log. Served by a stdlib HTTP
+control server ([`actions/content_agent_server.py`](actions/content_agent_server.py)) — no extra deps.
+
+In-process scheduling (`action: "schedule_daily"`) runs while Jarvis is on; for posting that
+survives reboots, point cron / Task Scheduler at the `post` command above.
+
+> **Instagram note:** the Graph API ingests Reels by URL, not file upload — set
+> `content_agent.public_base_url` to a host that serves `content/edited/`, or IG stays in dry-run.
+
+**Posting credentials** (all optional; missing ones just dry-run) go under the `content_agent`
+block in `config/api_keys.json` — see `config/api_keys.json.example` for the full shape.
+
+---
+
+# 🔒 Security
+
+Both HTTP surfaces bind to `127.0.0.1` only and are hardened per OWASP guidance for a
+local single-user control plane. Shared, dependency-free security layers:
+[`actions/security.py`](actions/security.py) (Python) and [`security.ts`](security.ts) (Node).
+
+**Rate limiting** — every endpoint is token-bucket limited per client (IP + session token),
+with graceful **429 + `Retry-After`**. Reads get generous headroom (the HUD polls ~40/min);
+expensive writes are strict (content posting ~6/min, the LLM `/turn` ~30/min).
+
+**Input validation & sanitization** — all request bodies are schema-validated: type checks,
+length caps, value allow-lists (e.g. `platforms ⊆ {youtube,instagram,twitter}`, `time` must match
+`HH:MM`), and **unexpected fields are rejected** (no mass-assignment). Bodies are size-capped
+(**413** over limit); invalid input returns **422** with a clear reason.
+
+**CSRF / origin protection (HUD)** — the content-agent server mints a random per-process token,
+injects it into the served page, and requires it on every `/api` call. A malicious web page in
+your browser cannot read that token, so it cannot forge posts/schedules. Reinforced by a **Host
+header allow-list** (anti DNS-rebinding) and an **Origin/Referer** check on mutations.
+
+**Secure key handling** — no secrets in source or sent to any client. Keys resolve **env-first,
+then file**:
+
+```bash
+# preferred: environment variables (nothing on disk)
+export GEMINI_API_KEY=AIza...
+export OPENROUTER_API_KEY=sk-or-...
+python main.py
+```
+
+If unset, they fall back to `config/api_keys.json`, which is **git-ignored** and auto-hardened to
+`chmod 600`. All readers route through [`config.get_secret()`](config/__init__.py) — one audited path.
+
+**Rotating a key:** mint a new one at the provider → update the env var (or `config/api_keys.json`)
+→ restart → revoke the old key at the provider. Because keys live only in the environment or a
+git-ignored 0600 file (never in git history or the client), exposure on rotation is minimal.
+
+**Response hardening** — both servers send `X-Content-Type-Options: nosniff`, `X-Frame-Options:
+DENY`, a strict `Content-Security-Policy`, and `no-store`; server errors return a generic message
+(details stay in the server log).

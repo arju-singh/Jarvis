@@ -27,8 +27,17 @@ import { loadMcpTools, type McpServerSpec } from "./mcp-bridge.js";
 import { resolveMode } from "./mode.js";
 import { makeBrain, type Turn } from "./providers/brain.js";
 import { makeTts, isSpeaking, stopSpeaking } from "./providers/tts.js";
+import {
+  rateLimit,
+  securityHeaders,
+  requireLoopbackHost,
+  validateBody,
+} from "./security.js";
 
 const PORT = Number(process.env.JARVIS_PORT ?? 8787);
+
+// Longest transcript we'll accept in one turn — guards the LLM + memory.
+const MAX_TURN_CHARS = 8000;
 
 // v4 — long-term memory, off unless explicitly enabled.
 const MEMORY_ON = /^(1|true|on|yes)$/i.test(process.env.JARVIS_MEMORY ?? "");
@@ -86,9 +95,13 @@ async function main() {
       args: ["./mcp-servers/projects/dist/index.js"],
       env: { GOOGLE_APPLICATION_CREDENTIALS: process.env.PROJECTS_SA_KEY ?? "" },
     },
-    // The standalone petsacre server still works if you prefer it:
-    // { name: "petsacre", command: "node", args: ["./mcp-servers/petsacre/dist/index.js"],
-    //   env: { GOOGLE_APPLICATION_CREDENTIALS: process.env.PETSACRE_SA_KEY ?? "" } },
+    // The standalone petsacre server, wired with its own service-account key.
+    {
+      name: "petsacre",
+      command: "node",
+      args: ["./mcp-servers/petsacre/dist/index.js"],
+      env: { GOOGLE_APPLICATION_CREDENTIALS: process.env.PETSACRE_SA_KEY ?? "" },
+    },
   ];
 
   // Python tools (ddg search, scrape, youtube transcript, clipboard, input,
@@ -124,31 +137,44 @@ async function main() {
   const history: Turn[] = [];
 
   const app = express();
-  app.use(express.json());
+  app.disable("x-powered-by");          // don't advertise Express
+  app.set("trust proxy", false);        // we bind loopback; trust the real socket IP
+
+  // ── security middleware (applied to every request) ──────────────
+  app.use(securityHeaders);
+  app.use(requireLoopbackHost);         // Host allow-list — anti DNS-rebinding
+  // Generous global limiter (the ears poll /speaking during playback).
+  app.use(rateLimit({ capacity: 240, refillPerSec: 8 }));
+  // Small JSON bodies only — caps payload size (OWASP: limit request size).
+  app.use(express.json({ limit: "32kb" }));
 
   // Browser chat UI at http://127.0.0.1:PORT/
   app.use(express.static(join(process.cwd(), "public")));
   // Silence Chrome DevTools' background probe so it doesn't log as a 404.
   app.get(/^\/\.well-known\//, (_req, res) => res.status(204).end());
 
-  app.post("/turn", async (req, res) => {
-    const text = req.body?.text;
-    if (typeof text !== "string" || !text.trim()) {
-      res.status(400).json({ error: "Field 'text' is required." });
-      return;
-    }
-    try {
-      const reply = await brain.reply(text, history, tools, systemPrompt());
-      history.push({ role: "user", text }, { role: "assistant", text: reply });
-      // Non-blocking: start speaking, return text right away so the ears can
-      // monitor for barge-in while playback happens.
-      tts.speak(reply).catch((err) => console.error("[tts]", err));
-      res.json({ reply });
-    } catch (err) {
-      console.error(err);
-      res.status(500).json({ error: (err as Error).message });
-    }
-  });
+  // Stricter limiter + strict schema for the expensive LLM turn endpoint.
+  const turnLimiter = rateLimit({ capacity: 12, refillPerSec: 0.5 }); // ~30/min
+  app.post(
+    "/turn",
+    turnLimiter,
+    validateBody({ text: { type: "string", required: true, trim: true, maxLen: MAX_TURN_CHARS } }),
+    async (req, res) => {
+      const text = req.body.text as string;
+      try {
+        const reply = await brain.reply(text, history, tools, systemPrompt());
+        history.push({ role: "user", text }, { role: "assistant", text: reply });
+        // Non-blocking: start speaking, return text right away so the ears can
+        // monitor for barge-in while playback happens.
+        tts.speak(reply).catch((err) => console.error("[tts]", err));
+        res.json({ reply });
+      } catch (err) {
+        // Log full detail server-side; return a generic message to the client.
+        console.error(err);
+        res.status(500).json({ error: "Internal error handling the turn." });
+      }
+    },
+  );
 
   // Barge-in support for the always-on ears.
   app.get("/speaking", (_req, res) => res.json({ speaking: isSpeaking() }));

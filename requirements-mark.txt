@@ -1,0 +1,48 @@
+# MARK XXXIX-OR — Python / Gemini-Live app (run with `python main.py`).
+# Tested on Python 3.11 / 3.12.  Install:  pip install -r requirements-mark.txt
+#
+# (The sibling `requirements.txt` is for the offline TS-brain "ears" — wake word
+#  + Whisper — and is a different dependency set. Use THIS file for `main.py`.)
+#
+# SYSTEM PREREQUISITE (not a pip package): ffmpeg — required by the content agent's
+# video-edit step. Install separately:
+#   macOS:  brew install ffmpeg     Debian/Ubuntu:  sudo apt install ffmpeg
+#   Windows:  winget install Gyan.FFmpeg   (or https://ffmpeg.org/download.html)
+# Without it the content agent posts source clips unedited (no crash).
+
+# ── Core: voice loop, UI, vision ──────────────────────────────────
+google-genai>=0.3.0            # new SDK: `from google import genai` → genai.Client
+google-generativeai>=0.8.0     # old SDK: `genai.configure` + GenerativeModel (still used by a few actions)
+PyQt6>=6.6                     # adaptive desktop UI (ui.py)
+sounddevice>=0.4.6             # mic capture / audio playback
+numpy>=1.26
+Pillow>=10.0                   # imaging (PIL)
+opencv-python>=4.8             # webcam vision (cv2)
+mss>=9.0                       # screen capture
+
+# ── System / desktop control ──────────────────────────────────────
+pyautogui>=0.9.54
+pygetwindow>=0.0.9
+pyperclip>=1.8
+psutil>=5.9
+send2trash>=1.8
+
+# ── Browser + web/search/media actions ────────────────────────────
+playwright>=1.40              # remember to run `playwright install` after pip
+requests>=2.31
+ddgs>=6.0                      # DuckDuckGo search (new package name)
+duckduckgo-search>=6.0        # legacy import path, kept for fallback
+youtube-transcript-api>=0.6
+pydub>=0.25
+
+# ── Document handling (file_processor / read_document) ─────────────
+pdfplumber>=0.10
+PyPDF2>=3.0
+python-docx>=1.1
+python-pptx>=0.6
+pandas>=2.0
+openpyxl>=3.1                 # pandas .xlsx engine
+
+# ── Windows-only extras (optional; imported behind try/except) ─────
+# Install these only on Windows — they no-op elsewhere:
+#   pip install comtypes pycaw pywinauto win10toast

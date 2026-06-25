@@ -12,5 +12,5 @@
     "declaration": false,
     "sourceMap": true
   },
-  "include": ["server.ts", "types.ts", "mcp-bridge.ts", "memory.ts", "mode.ts", "preflight.ts", "tools/**/*.ts", "providers/**/*.ts"]
+  "include": ["server.ts", "security.ts", "types.ts", "mcp-bridge.ts", "memory.ts", "mode.ts", "preflight.ts", "tools/**/*.ts", "providers/**/*.ts"]
 }

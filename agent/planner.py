@@ -115,6 +115,12 @@ code_helper
 dev_agent
   description: string (required)
   language: string (optional)
+
+content_agent
+  action: "post_now" | "schedule_daily" | "stop_schedule" | "status" | "list_clips" (optional, default post_now)
+  platforms: string (optional, e.g. "youtube instagram twitter")
+  topic: string (optional)
+  time: string (optional, "HH:MM" for schedule_daily)
 EXAMPLES:
 
 Goal: "research mechanical engineering and save it to a notepad file"
