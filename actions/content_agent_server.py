@@ -56,6 +56,11 @@ _LIMITS = {
 _BUCKET = {"/api/post": "post", "/api/schedule": "schedule",
            "/api/stop": "schedule", "/api/auth": "auth"}
 
+# Brute-force lockout for the session token, keyed by client IP: 10 bad tokens
+# within 60s -> 5-minute lockout. A correct token always passes (see
+# _require_session), so a legitimate user is never locked out by an attacker.
+_BRUTE = sec.BruteForceGuard(max_failures=10, window_sec=60.0, lockout_sec=300.0)
+
 # Per-endpoint request schemas (strict allow-list; unknown fields rejected).
 _SCHEMAS = {
     "/api/post": {
@@ -172,16 +177,38 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": False, "error": msg}, code, retry_after)
 
     # ── shared guards ─────────────────────────────────────────────
+    def _client_ip(self) -> str:
+        return self.client_address[0] if self.client_address else "?"
+
     def _client_key(self) -> str:
-        ip = self.client_address[0] if self.client_address else "?"
         tok = self.headers.get("X-CSRF-Token", "")[:64]
-        return f"{ip}:{tok}"
+        return f"{self._client_ip()}:{tok}"
 
     def _host_ok(self) -> bool:
         return sec.host_allowed(self.headers.get("Host", ""), self.port)
 
     def _csrf_ok(self) -> bool:
         return sec.constant_time_eq(self.headers.get("X-CSRF-Token", ""), sec.SESSION_TOKEN)
+
+    def _require_session(self) -> bool:
+        """Validate the session token with brute-force lockout.
+
+        A valid token always passes and clears the IP's failure history. An
+        invalid token is counted; once the IP trips the threshold it gets a
+        graceful 429 lockout — so token guessing is throttled, while the real
+        page (which holds the token) is never affected."""
+        ip = self._client_ip()
+        if self._csrf_ok():
+            _BRUTE.register_success(ip)
+            return True
+        locked, retry = _BRUTE.is_locked(ip)
+        _BRUTE.register_failure(ip)
+        if locked:
+            self._err(429, "Too many invalid attempts — temporarily locked out.",
+                      retry_after=retry)
+        else:
+            self._err(403, "Missing or invalid session token.")
+        return False
 
     def _rate_ok(self, bucket: str) -> bool:
         ok, retry = _LIMITS[bucket].check(self._client_key())
@@ -221,8 +248,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send(200, html, "text/html; charset=utf-8")
 
         if path == "/api/state":
-            if not self._csrf_ok():
-                return self._err(403, "Missing or invalid session token.")
+            if not self._require_session():
+                return
             if not self._rate_ok("read"):
                 return
             return self._json(_state())
@@ -237,9 +264,9 @@ class Handler(BaseHTTPRequestHandler):
         if path not in _SCHEMAS:
             return self._err(404, "unknown endpoint")
 
-        # CSRF: valid same-origin token required for every mutation.
-        if not self._csrf_ok():
-            return self._err(403, "Missing or invalid session token.")
+        # CSRF + brute-force: valid same-origin token required for every mutation.
+        if not self._require_session():
+            return
         # Defence in depth: reject cross-origin Origin/Referer if present.
         if not (sec.origin_allowed(self.headers.get("Origin", ""), self.port)
                 and sec.origin_allowed(self.headers.get("Referer", ""), self.port)):

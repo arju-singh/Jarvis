@@ -112,6 +112,59 @@ class RateLimiter:
                 self._buckets.pop(k, None)
 
 
+# ── Brute-force lockout ───────────────────────────────────────────
+@dataclass
+class BruteForceGuard:
+    """Locks out a key (typically a client IP) after too many FAILED auth attempts.
+
+    Why this is separate from RateLimiter: the request limiter is keyed by
+    (ip + token), so each wrong token gets a fresh bucket and is never throttled
+    — useless against token guessing. This guard keys on the IP alone and counts
+    *failures*, so repeated bad tokens trip a temporary lockout no matter which
+    token is presented.
+
+    Usage pattern (callers enforce "valid token always passes"):
+        if valid_token:  guard.register_success(ip)        # clears any lockout
+        else:            locked = guard.is_locked(ip); guard.register_failure(ip)
+    Because a correct token bypasses the lockout, a legitimate user on the same
+    loopback IP is never self-DoS'd by an attacker hammering bad tokens.
+    """
+    max_failures: int = 10          # failures within the window before lockout
+    window_sec: float = 60.0        # sliding window for counting failures
+    lockout_sec: float = 300.0      # how long a tripped lockout lasts
+    _fails: dict[str, list[float]] = field(default_factory=dict)
+    _locked_until: dict[str, float] = field(default_factory=dict)
+    _lock: threading.Lock = field(default_factory=threading.Lock)
+
+    def is_locked(self, key: str) -> tuple[bool, int]:
+        """Return (locked, retry_after_seconds)."""
+        now = time.monotonic()
+        with self._lock:
+            until = self._locked_until.get(key, 0.0)
+            if now < until:
+                return True, max(1, int(until - now) + 1)
+            return False, 0
+
+    def register_failure(self, key: str) -> None:
+        now = time.monotonic()
+        with self._lock:
+            arr = [t for t in self._fails.get(key, []) if t > now - self.window_sec]
+            arr.append(now)
+            if len(arr) >= self.max_failures:
+                self._locked_until[key] = now + self.lockout_sec
+                arr = []                      # reset window once locked
+            self._fails[key] = arr
+
+    def register_success(self, key: str) -> None:
+        """A valid auth clears the recent FAILURE history (instant recovery for a
+        legitimate client) but deliberately does NOT lift an active lockout: a
+        valid token already bypasses the lockout check, so on a shared loopback
+        IP a legit poll must not un-lock an attacker mid-spree. An engaged
+        lockout therefore always runs its full ``lockout_sec``."""
+        with self._lock:
+            self._fails.pop(key, None)
+
+
 # ── Strict schema validation ──────────────────────────────────────
 class ValidationError(ValueError):
     """Raised when user input fails the allow-list schema."""

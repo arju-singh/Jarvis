@@ -284,6 +284,12 @@ injects it into the served page, and requires it on every `/api` call. A malicio
 your browser cannot read that token, so it cannot forge posts/schedules. Reinforced by a **Host
 header allow-list** (anti DNS-rebinding) and an **Origin/Referer** check on mutations.
 
+**Brute-force lockout** — the session token is 256-bit, but guessing is also throttled directly:
+failed-token attempts are counted **per IP** (the request limiter alone can't help here — each
+wrong token is a different key), and **10 bad tokens within 60s triggers a 5-minute lockout**
+(graceful 429 + `Retry-After`). A *valid* token always bypasses the lockout, so the real page is
+never affected, and an engaged lockout runs its full duration regardless of other traffic.
+
 **Secure key handling** — no secrets in source or sent to any client. Keys resolve **env-first,
 then file**:
 
