@@ -1,8 +1,11 @@
 """
-JARVIS — offline ears.
+ARJU JARVIS — offline ears.
 
-Pipeline:  mic -> wake word ("Hey Jarvis") -> VAD (end of speech)
-           -> faster-whisper transcription -> POST to brain.
+Pipeline:  mic -> trigger (3 claps  OR  wake word "Hey Jarvis")
+           -> VAD (end of speech) -> faster-whisper transcription -> POST to brain.
+
+Trigger: clap THREE times (default) and Jarvis starts listening, or say the
+wake word. Both run at once — use whichever is convenient.
 
 Rules: no fallbacks. If a model/config is missing, this crashes immediately
 rather than degrading silently.
@@ -41,6 +44,54 @@ MAX_UTTERANCE_FRAMES = int(15.0 * SAMPLE_RATE / FRAME)   # hard cap 15s
 WAKE_THRESHOLD = float(os.environ.get("WAKE_THRESHOLD", "0.5"))
 BARGEIN_VAD_THRESHOLD = float(os.environ.get("BARGEIN_VAD_THRESHOLD", "0.6"))
 
+# Assistant name shown in the banner (the brain owns its own identity prompt).
+ASSISTANT_NAME = os.environ.get("JARVIS_NAME", "Arju Jarvis")
+
+# Clap-to-wake knobs (all env-tunable, no code edits):
+#   CLAP_COUNT          claps needed to trigger (default 3)
+#   CLAP_THRESHOLD      peak loudness 0-1 of full scale that counts as a clap
+#                       (default 0.45). Lower if your claps don't register;
+#                       raise if normal speech/noise false-triggers.
+#   CLAP_WINDOW         seconds the N claps must fall within (default 2.5)
+#   CLAP_REFRACTORY_MS  dead time after a clap so one clap isn't double-counted
+CLAP_COUNT = int(os.environ.get("CLAP_COUNT", "3"))
+CLAP_THRESHOLD = int(float(os.environ.get("CLAP_THRESHOLD", "0.45")) * 32767)
+CLAP_WINDOW_FRAMES = int(float(os.environ.get("CLAP_WINDOW", "2.5")) * SAMPLE_RATE / FRAME)
+CLAP_REFRACTORY_FRAMES = max(
+    1, int(float(os.environ.get("CLAP_REFRACTORY_MS", "150")) / 1000 * SAMPLE_RATE / FRAME)
+)
+
+
+class ClapDetector:
+    """Detect CLAP_COUNT sharp claps within CLAP_WINDOW from int16 mic frames.
+
+    A clap is a frame whose peak amplitude crosses the threshold after a brief
+    quiet gap (refractory) — counted by onset, not duration. Claps older than
+    the window roll off, so only a quick burst of N triggers."""
+
+    def __init__(self) -> None:
+        self.frame_idx = 0
+        self.cooldown = 0
+        self.claps: list[int] = []
+
+    def reset(self) -> None:
+        self.claps.clear()
+        self.cooldown = 0
+
+    def feed(self, i16: np.ndarray) -> bool:
+        self.frame_idx += 1
+        if self.cooldown > 0:
+            self.cooldown -= 1
+            return False
+        if int(np.abs(i16).max()) >= CLAP_THRESHOLD:
+            self.cooldown = CLAP_REFRACTORY_FRAMES
+            self.claps.append(self.frame_idx)
+            self.claps = [f for f in self.claps if self.frame_idx - f <= CLAP_WINDOW_FRAMES]
+            if len(self.claps) >= CLAP_COUNT:
+                self.claps.clear()
+                return True
+        return False
+
 
 def require_env(key: str) -> str:
     value = os.environ.get(key)
@@ -63,13 +114,37 @@ def stop_brain() -> None:
     requests.post(f"{BASE_URL}/stop", timeout=5).raise_for_status()
 
 
-def wait_for_wake(wake: WakeModel, audio_q: "queue.Queue[np.ndarray]") -> None:
+def wait_for_trigger(
+    wake: WakeModel, clap: ClapDetector, audio_q: "queue.Queue[np.ndarray]"
+) -> str:
+    """Block until the user either claps CLAP_COUNT times or says the wake word.
+    Returns which trigger fired ("clap" or "wake")."""
     wake.reset()
+    clap.reset()
+    debug = os.environ.get("WAKE_DEBUG", "") not in ("", "0", "false")
+    # openWakeWord is calibrated for 1280-sample (80 ms @ 16 kHz) chunks. Our mic
+    # frames are 512 samples (Silero VAD's required size), which scores ~0 if fed
+    # directly — so accumulate frames and predict on full 1280-sample windows.
+    WAKE_CHUNK = 1280
+    pending = np.empty(0, dtype=np.int16)
+    win_max = 0.0       # running max for periodic debug reporting
+    win_n = 0
     while True:
         samples = audio_q.get()[:, 0]                    # int16 mono
-        scores = wake.predict(samples)
-        if scores.get("hey_jarvis", 0.0) >= WAKE_THRESHOLD:
-            return
+        if clap.feed(samples):
+            return "clap"
+        pending = np.concatenate((pending, samples))
+        while pending.size >= WAKE_CHUNK:
+            chunk, pending = pending[:WAKE_CHUNK], pending[WAKE_CHUNK:]
+            score = wake.predict(chunk).get("hey_jarvis", 0.0)
+            if debug:
+                win_max = max(win_max, score)
+                win_n += 1
+                if win_n >= 12:   # ~1s of 80ms chunks → report the peak we saw
+                    print(f"  [wake?] peak hey_jarvis={win_max:.3f} (threshold {WAKE_THRESHOLD})")
+                    win_max, win_n = 0.0, 0
+            if score >= WAKE_THRESHOLD:
+                return "wake"
 
 
 def record_until_silence(
@@ -158,6 +233,7 @@ def monitor_for_bargein(
 
 def main() -> None:
     wake = WakeModel(wakeword_models=["hey_jarvis"], inference_framework="onnx")
+    clap = ClapDetector()
     vad_model = load_silero_vad()
     stt = WhisperModel(
         os.environ.get("WHISPER_MODEL", "large-v3"),
@@ -174,10 +250,13 @@ def main() -> None:
 
     with sd.InputStream(samplerate=SAMPLE_RATE, channels=1, dtype="int16",
                         blocksize=FRAME, callback=callback):
-        print("Jarvis ears online. Say 'Hey Jarvis'.")
+        print(
+            f"{ASSISTANT_NAME} ears online. "
+            f"Clap {CLAP_COUNT}x or say 'Hey Jarvis'."
+        )
         while True:
-            wait_for_wake(wake, audio_q)
-            print("  [wake] listening...")
+            trigger = wait_for_trigger(wake, clap, audio_q)
+            print(f"  [{trigger}] listening...")
             audio = record_until_silence(vad_model, audio_q)
             if audio is None:
                 print("  [vad] heard nothing.")

@@ -109,38 +109,63 @@ class OllamaBrain implements BrainProvider {
   private host: string;
   private model: string;
   private apiKey?: string;
+  /** Reasoning effort for "thinking" models (gpt-oss). false = off, or "low"|"medium"|"high". */
+  private think: boolean | "low" | "medium" | "high";
 
   constructor() {
     this.host = (process.env.JARVIS_OLLAMA_URL ?? "http://127.0.0.1:11434").replace(/\/$/, "");
     this.model = process.env.JARVIS_OLLAMA_MODEL ?? "qwen2.5";
     // Set for Ollama Cloud (https://ollama.com); leave unset for a local daemon.
     this.apiKey = process.env.OLLAMA_API_KEY || process.env.JARVIS_OLLAMA_API_KEY;
+    // Reasoning models (gpt-oss) pause to "think" before answering — the bulk of
+    // the perceived speak-lag. "low" keeps tool-calling sharp while cutting that
+    // pause; "off" disables it entirely. Non-reasoning models ignore this.
+    const t = (process.env.JARVIS_OLLAMA_THINK ?? "low").toLowerCase();
+    this.think =
+      t === "off" || t === "false" || t === "none" || t === "0" ? false
+      : t === "medium" || t === "high" ? (t as "medium" | "high")
+      : "low";
   }
 
-  private async chat(messages: OllamaMessage[], tools: Tool[]): Promise<OllamaMessage> {
-    let res: Response;
+  private async post(
+    messages: OllamaMessage[],
+    tools: Tool[],
+    think: boolean | "low" | "medium" | "high" | undefined,
+  ): Promise<Response> {
+    const body: Record<string, unknown> = {
+      model: this.model,
+      messages,
+      tools: tools.map((t) => ({
+        type: "function",
+        function: { name: t.name, description: t.description, parameters: t.input_schema },
+      })),
+      stream: false,
+    };
+    if (think !== undefined) body.think = think;
     try {
-      res = await fetch(`${this.host}/api/chat`, {
+      return await fetch(`${this.host}/api/chat`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           ...(this.apiKey ? { Authorization: `Bearer ${this.apiKey}` } : {}),
         },
-        body: JSON.stringify({
-          model: this.model,
-          messages,
-          tools: tools.map((t) => ({
-            type: "function",
-            function: { name: t.name, description: t.description, parameters: t.input_schema },
-          })),
-          stream: false,
-        }),
+        body: JSON.stringify(body),
       });
     } catch (err) {
       throw new Error(
         `Cannot reach Ollama at ${this.host}: ${(err as Error).message}. ` +
           `Is it running? (ollama serve, then 'ollama pull ${this.model}')`,
       );
+    }
+  }
+
+  private async chat(messages: OllamaMessage[], tools: Tool[]): Promise<OllamaMessage> {
+    let res = await this.post(messages, tools, this.think);
+    // Non-reasoning models (e.g. qwen2.5) reject `think`; retry once without it.
+    if (!res.ok && this.think !== undefined) {
+      const detail = await res.text();
+      if (/think/i.test(detail)) res = await this.post(messages, tools, undefined);
+      else throw new Error(`Ollama error ${res.status}: ${detail}`);
     }
     if (!res.ok) throw new Error(`Ollama error ${res.status}: ${await res.text()}`);
     const data = (await res.json()) as { message?: OllamaMessage };

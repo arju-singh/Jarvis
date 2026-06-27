@@ -149,10 +149,31 @@ export const computerTools: Tool[] = [
   {
     name: "shutdown_jarvis",
     description:
-      "Stop the Jarvis assistant session (shuts down the brain). Only call this when the user " +
-      "clearly wants to end the assistant — not for casual goodbyes.",
-    input_schema: { type: "object", properties: {} },
-    run: async () => {
+      "Stop the Jarvis assistant session (exits the brain — the user must relaunch it manually). " +
+      "ONLY call this when the user EXPLICITLY asks to stop Jarvis or the assistant BY NAME, e.g. " +
+      "\"shut down Jarvis\", \"stop the assistant\", \"quit Jarvis\", \"go to sleep Jarvis\". " +
+      "DO NOT call it for a bare \"shut down\"/\"shutdown\" (that means their computer, not you), " +
+      "and not for casual goodbyes like \"bye\" or \"thanks\". Pass the user's exact words in `user_said`.",
+    input_schema: {
+      type: "object",
+      properties: {
+        user_said: { type: "string", description: "The user's exact words requesting the shutdown." },
+      },
+      required: ["user_said"],
+    },
+    run: async ({ user_said }: { user_said?: string }) => {
+      // Hard guard, independent of the model: only actually exit when the request
+      // clearly names Jarvis / the assistant. A bare "shut down" never kills us.
+      const said = String(user_said ?? "");
+      const meansAssistant =
+        /\b(jarvis|the assistant|assistant)\b/i.test(said) ||
+        /\bstop (listening|the session)\b/i.test(said);
+      if (!meansAssistant) {
+        return (
+          "Not shutting down — that didn't clearly ask to stop the assistant. " +
+          "If you want me to actually stop, say \"shut down Jarvis\"."
+        );
+      }
       // Let the reply send + speak first, then exit.
       setTimeout(() => process.exit(0), 1500);
       return "Shutting down. Goodbye.";

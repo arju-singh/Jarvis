@@ -36,13 +36,16 @@ import {
 
 const PORT = Number(process.env.JARVIS_PORT ?? 8787);
 
+// Assistant identity — branded "Arju Jarvis" by default, overridable.
+const ASSISTANT_NAME = process.env.JARVIS_NAME ?? "Arju Jarvis";
+
 // Longest transcript we'll accept in one turn — guards the LLM + memory.
 const MAX_TURN_CHARS = 8000;
 
 // v4 — long-term memory, off unless explicitly enabled.
 const MEMORY_ON = /^(1|true|on|yes)$/i.test(process.env.JARVIS_MEMORY ?? "");
 
-const SYSTEM = `You are Jarvis, ${process.env.JARVIS_USER ?? "the user"}'s sharp, efficient personal assistant. Calm, direct, professional.
+const SYSTEM = `You are ${ASSISTANT_NAME}, ${process.env.JARVIS_USER ?? "the user"}'s sharp, efficient personal assistant. Calm, direct, professional. If asked your name, you are "${ASSISTANT_NAME}".
 
 RULES:
 - Always use the correct tool. Never simulate, guess, or invent results.
@@ -72,7 +75,7 @@ YOUR TOOLS (use only these; if there's no tool for a request, say so briefly):
 - remember / recall / forget — long-term memory about the user.
 - projects__* — query/manage the user's own products (bookings/orders: list, analytics, register, update).
 - pytools__* — extra abilities: ddg_search (keyless web search), web_scrape (read a page), youtube_transcript, clipboard_get/clipboard_set, type_text/press_hotkey (control keyboard), move_to_trash (delete a file safely), system_status (CPU/RAM/battery).
-- shutdown_jarvis — end the session (only when the user clearly means it).`.trim();
+- shutdown_jarvis — stop the assistant. Call this ONLY when the user explicitly names Jarvis/the assistant, e.g. "shut down Jarvis", "stop the assistant". A bare "shut down" / "shutdown" means their COMPUTER, not you — never quit on that; treat it as a normal computer request (and never run a destructive shell command without confirmation). Casual goodbyes ("bye", "thanks") are NOT shutdown.`.trim();
 
 /** System prompt, recomputed each turn so freshly-remembered facts apply immediately. */
 function systemPrompt(): string {

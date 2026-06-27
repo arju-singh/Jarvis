@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Jarvis</title>
+<title>Arju Jarvis</title>
 <style>
   :root { --bg:#0b0f14; --panel:#121821; --me:#1f6feb; --jarvis:#0e2a33; --accent:#22d3ee; --text:#e6edf3; --dim:#7d8590; }
   * { box-sizing: border-box; }
@@ -31,13 +31,13 @@
 <body>
   <header>
     <span class="dot"></span>
-    <h1>JARVIS</h1>
+    <h1>ARJU JARVIS</h1>
     <span class="status" id="status">ready</span>
   </header>
   <div id="log"></div>
   <form id="form">
     <button type="button" class="mic" id="mic" title="Speak">🎤</button>
-    <input id="input" placeholder="Message Jarvis…" autocomplete="off" autofocus />
+    <input id="input" placeholder="Message Arju Jarvis…" autocomplete="off" autofocus />
     <button type="submit" id="send">Send</button>
   </form>
 
@@ -65,7 +65,7 @@ async function sendText(text) {
   input.value = '';
   send.disabled = true;
   statusEl.textContent = 'thinking…';
-  const thinking = bubble('Jarvis is thinking…', 'jarvis typing');
+  const thinking = bubble('Arju Jarvis is thinking…', 'jarvis typing');
   try {
     const res = await fetch('/turn', {
       method: 'POST',
@@ -107,7 +107,7 @@ if (!SR) {
   rec.onresult = (ev) => { sendText(ev.results[0][0].transcript); };
 }
 
-bubble("Hi, I'm Jarvis. Type or tap the mic to talk. My voice plays on the machine running the brain.", 'jarvis');
+bubble("Hi, I'm Arju Jarvis. Type or tap the mic to talk. My voice plays on the machine running the brain.", 'jarvis');
 </script>
 </body>
 </html>
