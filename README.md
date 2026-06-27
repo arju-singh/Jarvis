@@ -264,6 +264,51 @@ block in `config/api_keys.json` — see `config/api_keys.json.example` for the f
 
 ---
 
+# 🏗️ Architecture & Stack
+
+Two independent runtimes share one repo: a **Python / Gemini-Live** app (`main.py`) and a
+**TypeScript / Claude** brain (`server.ts`). The content agent and its HUD live on the Python
+side and are built almost entirely on the **standard library + `requests`** — no web framework,
+no new dependencies — which is why the security hardening dropped in without touching `requirements`.
+
+### Python app — MARK XXXIX-OR (`main.py`)
+| Layer | Tech |
+|---|---|
+| Language | Python 3.11 / 3.12 |
+| Voice + tool-calling | Gemini Live (`gemini-2.5-flash-native-audio`) via `google-genai` (+ legacy `google-generativeai`) |
+| Action-level LLM | OpenRouter free models (`or_client.py` over `requests`) |
+| Desktop UI | PyQt6 (`ui.py`) |
+| Audio | `sounddevice`, `numpy` |
+| Vision / screen | `opencv-python`, `mss`, `Pillow` |
+| System control | `pyautogui`, `pygetwindow`, `pyperclip`, `psutil`, `send2trash` |
+| Browser | Playwright |
+| Documents | `pdfplumber`, `PyPDF2`, `python-docx`, `python-pptx`, `pandas`, `openpyxl` |
+| Misc | `ddgs` / `duckduckgo-search`, `youtube-transcript-api`, `pydub` |
+
+### Content Agent
+| Concern | Tech |
+|---|---|
+| Pipeline | local clips → **ffmpeg** edit → OpenRouter caption → post → JSON ledger |
+| Posting APIs (`requests`) | YouTube Data API v3, Instagram Graph API (Reels), X/Twitter v1.1 + v2 |
+| OAuth | OAuth2 loopback (YouTube), hand-rolled OAuth1 `hmac`/`hashlib`/`base64` (Twitter), long-lived token exchange (Instagram) |
+| HUD server | Python stdlib `http.server` (`ThreadingHTTPServer`) — no framework |
+| HUD frontend | vanilla HTML/CSS/JS, poll-based `fetch` |
+| Scheduling | `threading` (in-process daily) + bash cron wrapper |
+| Security | custom `actions/security.py` / `security.ts` — see below |
+
+### TypeScript brain (`server.ts`)
+| Layer | Tech |
+|---|---|
+| Runtime | Node + TypeScript (`tsx`, ES2022, NodeNext), Express 5 |
+| Reasoning | Claude via `@anthropic-ai/sdk`; tools via `@modelcontextprotocol/sdk` + `zod-to-json-schema` |
+| Voice | ElevenLabs / Piper / macOS `say`; offline brain Ollama (Qwen 2.5) |
+| Data | Firestore (the `projects` MCP server) via Google service accounts |
+
+### Offline "ears" (Python)
+`faster-whisper` (STT) · `openwakeword` (wake word) · `silero-vad` (VAD) · `torch`
+
+---
+
 # 🔒 Security
 
 Both HTTP surfaces bind to `127.0.0.1` only and are hardened per OWASP guidance for a
