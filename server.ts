@@ -10,9 +10,11 @@
  * Run:  npm run dev
  */
 
-import express from "express";
+import express, { type Response } from "express";
 import { join } from "node:path";
 import { existsSync } from "node:fs";
+import os from "node:os";
+import { exec } from "node:child_process";
 
 import type { Tool } from "./types.js";
 import { desktopTools } from "./tools/desktop.js";
@@ -151,10 +153,54 @@ async function main() {
   // Small JSON bodies only — caps payload size (OWASP: limit request size).
   app.use(express.json({ limit: "32kb" }));
 
-  // Browser chat UI at http://127.0.0.1:PORT/
+  // Browser dashboard at http://127.0.0.1:PORT/
   app.use(express.static(join(process.cwd(), "public")));
   // Silence Chrome DevTools' background probe so it doesn't log as a 404.
   app.get(/^\/\.well-known\//, (_req, res) => res.status(204).end());
+
+  // ── live event stream (SSE) — pushes voice/brain state to the dashboard ──
+  const sseClients = new Set<Response>();
+  const broadcast = (event: Record<string, unknown>) => {
+    const payload = `data: ${JSON.stringify(event)}\n\n`;
+    for (const client of sseClients) {
+      try {
+        client.write(payload);
+      } catch {
+        sseClients.delete(client);
+      }
+    }
+  };
+  app.get("/events", (req, res) => {
+    res.setHeader("Content-Type", "text/event-stream");
+    res.setHeader("Cache-Control", "no-cache, no-transform");
+    res.setHeader("Connection", "keep-alive");
+    res.flushHeaders?.();
+    res.write(`data: ${JSON.stringify({ type: "hello", name: ASSISTANT_NAME })}\n\n`);
+    sseClients.add(res);
+    const keepAlive = setInterval(() => {
+      try {
+        res.write(": ping\n\n");
+      } catch {
+        /* client gone; cleaned up on close */
+      }
+    }, 25_000);
+    req.on("close", () => {
+      clearInterval(keepAlive);
+      sseClients.delete(res);
+    });
+  });
+  // The ears push UI state here — e.g. "listening" the instant you clap.
+  app.post(
+    "/event",
+    validateBody({
+      type: { type: "string", required: true, maxLen: 32, trim: true },
+      via: { type: "string", maxLen: 32, trim: true },
+    }),
+    (req, res) => {
+      broadcast({ type: req.body.type, via: req.body.via });
+      res.json({ ok: true });
+    },
+  );
 
   // Stricter limiter + strict schema for the expensive LLM turn endpoint.
   const turnLimiter = rateLimit({ capacity: 12, refillPerSec: 0.5 }); // ~30/min
@@ -164,9 +210,14 @@ async function main() {
     validateBody({ text: { type: "string", required: true, trim: true, maxLen: MAX_TURN_CHARS } }),
     async (req, res) => {
       const text = req.body.text as string;
+      // Push the question + a "thinking" state to the dashboard right away.
+      broadcast({ type: "user", text });
+      broadcast({ type: "thinking" });
       try {
         const reply = await brain.reply(text, history, tools, systemPrompt());
         history.push({ role: "user", text }, { role: "assistant", text: reply });
+        broadcast({ type: "reply", text: reply });
+        broadcast({ type: "speaking" });
         // Non-blocking: start speaking, return text right away so the ears can
         // monitor for barge-in while playback happens.
         tts.speak(reply).catch((err) => console.error("[tts]", err));
@@ -174,10 +225,47 @@ async function main() {
       } catch (err) {
         // Log full detail server-side; return a generic message to the client.
         console.error(err);
+        broadcast({ type: "error", text: "Something went wrong handling that." });
         res.status(500).json({ error: "Internal error handling the turn." });
       }
     },
   );
+
+  // ── live system stats for the dashboard ────────────────────────
+  // CPU% is computed as the busy fraction since the previous /stats call.
+  const cpuSnapshot = () => {
+    let idle = 0, total = 0;
+    for (const c of os.cpus()) {
+      for (const t of Object.values(c.times)) total += t;
+      idle += c.times.idle;
+    }
+    return { idle, total };
+  };
+  let prevCpu = cpuSnapshot();
+  const cpuPct = () => {
+    const cur = cpuSnapshot();
+    const idle = cur.idle - prevCpu.idle, total = cur.total - prevCpu.total;
+    prevCpu = cur;
+    return total > 0 ? Math.round(100 * (1 - idle / total)) : 0;
+  };
+  // Battery via `pmset`, cached 15s so we don't spawn it on every poll.
+  let battCache: { pct: number | null; at: number } = { pct: null, at: 0 };
+  const battery = () =>
+    new Promise<number | null>((resolve) => {
+      if (Date.now() - battCache.at < 15_000) return resolve(battCache.pct);
+      exec("pmset -g batt", { timeout: 2000 }, (err, out) => {
+        const m = err ? null : /(\d+)%/.exec(out);
+        battCache = { pct: m ? Number(m[1]) : null, at: Date.now() };
+        resolve(battCache.pct);
+      });
+    });
+  app.get("/stats", async (_req, res) => {
+    res.json({
+      cpu: cpuPct(),
+      mem: Math.round(100 * (1 - os.freemem() / os.totalmem())),
+      battery: await battery(),
+    });
+  });
 
   // Barge-in support for the always-on ears.
   app.get("/speaking", (_req, res) => res.json({ speaking: isSpeaking() }));

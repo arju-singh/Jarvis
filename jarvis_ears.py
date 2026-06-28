@@ -20,6 +20,7 @@ from __future__ import annotations  # lazy annotations — `X | None` works on 3
 
 import os
 import queue
+import subprocess
 import sys
 
 import numpy as np
@@ -112,6 +113,37 @@ def brain_speaking() -> bool:
 
 def stop_brain() -> None:
     requests.post(f"{BASE_URL}/stop", timeout=5).raise_for_status()
+
+
+def notify_ui(event_type: str, via: str = "") -> None:
+    """Best-effort ping so the dashboard lights up in real time (e.g. on clap).
+    Never blocks or crashes the ears if the dashboard/brain isn't reachable."""
+    try:
+        body = {"type": event_type}
+        if via:
+            body["via"] = via
+        requests.post(f"{BASE_URL}/event", json=body, timeout=2)
+    except Exception:
+        pass
+
+
+# Bring the dashboard app to the front when you wake Jarvis ("open his screen").
+# Set JARVIS_FOCUS_APP="" to disable, or to another app (e.g. "Safari").
+FOCUS_APP = os.environ.get("JARVIS_FOCUS_APP", "Google Chrome")
+
+
+def bring_dashboard_to_front() -> None:
+    """Raise the browser window on wake so the HUD is visible. Best-effort, macOS."""
+    if not FOCUS_APP:
+        return
+    try:
+        subprocess.run(
+            ["osascript", "-e", f'tell application "{FOCUS_APP}" to activate'],
+            timeout=3, check=False,
+            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
 
 
 def wait_for_trigger(
@@ -257,12 +289,17 @@ def main() -> None:
         while True:
             trigger = wait_for_trigger(wake, clap, audio_q)
             print(f"  [{trigger}] listening...")
+            notify_ui("listening", via=trigger)   # dashboard lights up instantly
+            bring_dashboard_to_front()            # "open his screen" on wake
             audio = record_until_silence(vad_model, audio_q)
             if audio is None:
                 print("  [vad] heard nothing.")
+                notify_ui("idle")
                 continue
+            notify_ui("transcribing")
             text = transcribe(stt, audio)
             if not text:
+                notify_ui("idle")
                 continue
             print(f"  you: {text}")
             reply = post_transcript(text)

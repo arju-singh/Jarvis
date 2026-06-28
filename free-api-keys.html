@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Free API Keys — Sources & Uses</title>
+<style>
+  @page { size: A4; margin: 16mm 15mm; }
+  * { box-sizing: border-box; }
+  body { font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+         color: #1a2230; line-height: 1.45; font-size: 12px; margin: 0; }
+  h1 { font-size: 23px; margin: 0 0 2px; color: #0b1830; }
+  .sub { color: #5b6878; margin: 0 0 16px; font-size: 11.5px; }
+  h2 { font-size: 15px; margin: 20px 0 3px; padding-bottom: 5px;
+       border-bottom: 2px solid #e2e8f0; color: #0e3a53; }
+  .use { color: #475569; font-size: 11.5px; margin: 4px 0 8px; }
+  .use b { color: #0e3a53; }
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 8px; }
+  th, td { text-align: left; padding: 6px 9px; border-bottom: 1px solid #e8edf3;
+           vertical-align: top; }
+  th { background: #f4f7fb; font-size: 10.5px; text-transform: uppercase;
+       letter-spacing: .03em; color: #44566b; }
+  td.prov { font-weight: 600; white-space: nowrap; }
+  td.url { color: #1558d6; white-space: nowrap; font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; }
+  .pick { background: #eafaf1; border-left: 4px solid #1fa463; padding: 9px 12px;
+          border-radius: 6px; margin: 8px 0 4px; font-size: 11.5px; }
+  .rule { background: #fff7ed; border-left: 4px solid #e08a00; padding: 11px 14px;
+          border-radius: 6px; margin: 10px 0; }
+  .rule h2 { border: 0; margin: 0 0 6px; color: #9a5b00; }
+  ul { margin: 4px 0; padding-left: 18px; }
+  li { margin: 2px 0; }
+  code { background: #eef1f5; padding: 1px 5px; border-radius: 4px;
+         font-family: ui-monospace, Menlo, monospace; font-size: 10.5px; }
+  .map { background: #f4f7fb; border-radius: 6px; padding: 10px 14px; margin: 8px 0; font-size: 11.5px; }
+  .map td { border: 0; padding: 3px 8px 3px 0; }
+  .foot { margin-top: 16px; color: #8693a4; font-size: 10px; text-align: center; }
+</style>
+</head>
+<body>
+  <h1>Free API Keys — Sources &amp; What They're For</h1>
+  <p class="sub">Create your own free account on each site and use your own key, within the free quota. Free tier &ne; stolen key.</p>
+
+  <h2>🧠 LLM / "Brain" APIs</h2>
+  <p class="use"><b>What it does:</b> takes text in, returns generated text. <b>Where to use:</b> chatbots &amp; voice-assistant brains (like Jarvis), tool-calling agents, summarizing/rewriting, classification &amp; extraction, content &amp; marketing copy, coding help, Q&amp;A over your data.</p>
+  <table>
+    <thead><tr><th>Provider</th><th>Get the key</th><th>Best used for</th></tr></thead>
+    <tbody>
+      <tr><td class="prov">Google Gemini</td><td class="url">aistudio.google.com/apikey</td><td>General brain + vision (images). Best free tier. Already wired in Jarvis (<code>AIza…</code>)</td></tr>
+      <tr><td class="prov">Groq</td><td class="url">console.groq.com</td><td>When you need <b>speed</b> — near-instant replies for live voice/chat (Llama, Qwen, gpt-oss)</td></tr>
+      <tr><td class="prov">Cerebras</td><td class="url">cloud.cerebras.ai</td><td>Also very fast inference; good real-time fallback</td></tr>
+      <tr><td class="prov">OpenRouter</td><td class="url">openrouter.ai/keys</td><td>Try <b>many models with one key</b>; some free. Good for experimenting</td></tr>
+      <tr><td class="prov">Mistral</td><td class="url">console.mistral.ai</td><td>Lightweight chat / coding tasks</td></tr>
+      <tr><td class="prov">Cohere</td><td class="url">dashboard.cohere.com</td><td>Search/RAG, embeddings, text classification</td></tr>
+      <tr><td class="prov">Together AI</td><td class="url">api.together.ai</td><td>Wide open-model catalog; signup credits</td></tr>
+      <tr><td class="prov">GitHub Models</td><td class="url">github.com/marketplace/models</td><td>Free for devs to prototype (uses your GitHub token)</td></tr>
+      <tr><td class="prov">Cloudflare Workers AI</td><td class="url">dash.cloudflare.com</td><td>Run models at the edge inside web apps</td></tr>
+      <tr><td class="prov">Ollama (local)</td><td class="url">ollama.com</td><td>Private/offline brain — no key, no internet, unlimited</td></tr>
+    </tbody>
+  </table>
+  <div class="pick"><b>For the Jarvis fallback:</b> Gemini is the easiest drop-in (already supported). Groq / Cerebras / OpenRouter use the OpenAI format and need ~30 lines added to <code>brain.ts</code>.</div>
+
+  <h2>🔊 Voice / TTS APIs</h2>
+  <p class="use"><b>What it does:</b> turns text into spoken audio. <b>Where to use:</b> the voice that Jarvis speaks with, screen readers / accessibility, audio notifications, IVR phone menus, narration for videos.</p>
+  <table>
+    <thead><tr><th>Provider</th><th>Where</th><th>Best used for</th></tr></thead>
+    <tbody>
+      <tr><td class="prov">Piper</td><td class="url">local (installed)</td><td>Offline, unlimited voice — your default; works with no internet</td></tr>
+      <tr><td class="prov">macOS say</td><td class="url">built-in</td><td>Zero-setup fallback so voice never fully drops</td></tr>
+      <tr><td class="prov">Azure Speech</td><td class="url">azure.microsoft.com</td><td>High-quality neural voices, 500k chars/mo free</td></tr>
+      <tr><td class="prov">Google Cloud TTS</td><td class="url">cloud.google.com/text-to-speech</td><td>Natural voices, many languages</td></tr>
+      <tr><td class="prov">Amazon Polly</td><td class="url">aws.amazon.com/polly</td><td>Production TTS (free 12 months)</td></tr>
+      <tr><td class="prov">ElevenLabs</td><td class="url">elevenlabs.io</td><td>Most realistic "butler" voice; 10k chars/mo free (resets monthly)</td></tr>
+    </tbody>
+  </table>
+
+  <h2>🔎 Other Useful APIs</h2>
+  <p class="use"><b>What it does:</b> fetch live real-world data your assistant/app can act on. <b>Where to use:</b> answering questions and powering tools.</p>
+  <table>
+    <thead><tr><th>Type</th><th>Provider</th><th>Used for</th></tr></thead>
+    <tbody>
+      <tr><td class="prov">Weather</td><td class="url">Open-Meteo (no key) · OpenWeatherMap</td><td>"What's the weather?" — current &amp; forecast data</td></tr>
+      <tr><td class="prov">Web search</td><td class="url">DuckDuckGo · Brave · Tavily</td><td>Look up live info, feed results to the LLM (RAG)</td></tr>
+      <tr><td class="prov">Flights</td><td class="url">Amadeus (test tier)</td><td>Search real flights between airports/dates</td></tr>
+      <tr><td class="prov">Maps/places</td><td class="url">OpenStreetMap / Nominatim (no key)</td><td>Geocoding, addresses, nearby places</td></tr>
+    </tbody>
+  </table>
+
+  <h2>🧩 Where each fits in a project</h2>
+  <div class="map">
+    <table>
+      <tr><td><b>Understand &amp; reply to the user</b></td><td>→ LLM / Brain API (Gemini, Groq, Ollama…)</td></tr>
+      <tr><td><b>Speak the reply out loud</b></td><td>→ TTS API (Piper, ElevenLabs, Azure…)</td></tr>
+      <tr><td><b>Hear the user (speech → text)</b></td><td>→ STT (Whisper — runs locally in Jarvis)</td></tr>
+      <tr><td><b>Fetch live facts (weather, news, flights)</b></td><td>→ Data APIs (Open-Meteo, search, Amadeus…)</td></tr>
+      <tr><td><b>Answer over your own docs/data</b></td><td>→ Embeddings + search (Cohere, OpenRouter…)</td></tr>
+    </table>
+  </div>
+
+  <div class="rule">
+    <h2>⚠️ The one rule that keeps it legal</h2>
+    <ul>
+      <li>Sign up with <b>your own account</b>, use <b>your own key</b>, stay within the <b>free quota</b>, and follow each provider's <b>terms</b> (usually one free account per person, no reselling, no abuse).</li>
+      <li>Never use keys you found posted online or that belong to someone else.</li>
+    </ul>
+  </div>
+
+  <p class="foot">Generated for Arju Jarvis · free tiers &amp; quotas change — check each provider's pricing page for current limits.</p>
+</body>
+</html>

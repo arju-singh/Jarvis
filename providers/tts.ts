@@ -133,12 +133,68 @@ class SayTts implements TtsProvider {
   }
 }
 
-export function makeTts(mode: Mode): TtsProvider {
-  // Explicit provider override (e.g. JARVIS_TTS=say) takes precedence over mode.
-  switch (process.env.JARVIS_TTS?.toLowerCase()) {
-    case "say": return new SayTts();
-    case "piper": return new PiperTts();
-    case "elevenlabs": return new ElevenLabsTts();
+// --- Automatic failover across the user's own voices -----------------------
+
+/** Tries each voice in order; on error (quota, missing model, spawn fail) falls to the next. */
+class FailoverTts implements TtsProvider {
+  readonly name: string;
+  constructor(private readonly providers: TtsProvider[]) {
+    this.name = `failover(${providers.map((p) => p.name).join("→")})`;
   }
-  return mode === "offline" ? new PiperTts() : new ElevenLabsTts();
+
+  async speak(text: string): Promise<void> {
+    if (!text.trim()) return;
+    const errors: string[] = [];
+    for (let i = 0; i < this.providers.length; i++) {
+      const p = this.providers[i];
+      try {
+        await p.speak(text);
+        if (i > 0) console.error(`[tts] spoke via fallback "${p.name}"`);
+        return;
+      } catch (err) {
+        const msg = (err as Error).message;
+        errors.push(`${p.name}: ${msg}`);
+        const next = this.providers[i + 1];
+        console.error(`[tts] "${p.name}" failed: ${msg}` + (next ? ` — falling back to "${next.name}"` : ""));
+      }
+    }
+    throw new Error(`All TTS providers failed: ${errors.join("; ")}`);
+  }
+}
+
+/** Construct a voice by name, returning null (with a log) if its config is missing. */
+function buildTts(name: string): TtsProvider | null {
+  try {
+    switch (name) {
+      case "elevenlabs": return new ElevenLabsTts();
+      case "piper": return new PiperTts();
+      case "say": return new SayTts();
+      default: return null;
+    }
+  } catch (err) {
+    console.error(`[tts] "${name}" unavailable: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+export function makeTts(mode: Mode): TtsProvider {
+  // Primary: explicit JARVIS_TTS override, else the mode default.
+  const primary = process.env.JARVIS_TTS?.toLowerCase() || (mode === "offline" ? "piper" : "elevenlabs");
+  const failoverOff = /^(off|0|false|no)$/i.test(process.env.JARVIS_FAILOVER ?? "");
+
+  // Primary first, then the rest. "say" is the always-available last resort on macOS.
+  const order = [primary, ...["elevenlabs", "piper", "say"].filter((n) => n !== primary)];
+  const providers = (failoverOff ? [primary] : order)
+    .map(buildTts)
+    .filter((p): p is TtsProvider => p !== null);
+
+  if (providers.length === 0) {
+    throw new Error(
+      "No TTS provider configured. Set ELEVENLABS_API_KEY + ELEVENLABS_VOICE_ID, " +
+        "or PIPER_MODEL, or use macOS 'say' (JARVIS_TTS=say).",
+    );
+  }
+  if (providers.length === 1) return providers[0];
+  console.log(`[tts] failover chain: ${providers.map((p) => p.name).join(" → ")}`);
+  return new FailoverTts(providers);
 }

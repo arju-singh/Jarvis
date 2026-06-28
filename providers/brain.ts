@@ -283,12 +283,68 @@ class GeminiBrain implements BrainProvider {
   }
 }
 
-export function makeBrain(mode: Mode): BrainProvider {
-  // Explicit provider override (e.g. JARVIS_BRAIN=gemini) takes precedence over mode.
-  switch (process.env.JARVIS_BRAIN?.toLowerCase()) {
-    case "gemini": return new GeminiBrain();
-    case "claude": return new ClaudeBrain();
-    case "ollama": return new OllamaBrain();
+// --- Automatic failover across the user's own providers --------------------
+
+/** Tries each provider in order; on error (quota, revoked key, network) falls to the next. */
+class FailoverBrain implements BrainProvider {
+  readonly name: string;
+  constructor(private readonly providers: BrainProvider[]) {
+    this.name = `failover(${providers.map((p) => p.name).join("→")})`;
   }
-  return mode === "offline" ? new OllamaBrain() : new ClaudeBrain();
+
+  async reply(userText: string, history: Turn[], tools: Tool[], system: string): Promise<string> {
+    const errors: string[] = [];
+    for (let i = 0; i < this.providers.length; i++) {
+      const p = this.providers[i];
+      try {
+        const out = await p.reply(userText, history, tools, system);
+        if (i > 0) console.error(`[brain] recovered via fallback "${p.name}"`);
+        return out;
+      } catch (err) {
+        const msg = (err as Error).message;
+        errors.push(`${p.name}: ${msg}`);
+        const next = this.providers[i + 1];
+        console.error(`[brain] provider "${p.name}" failed: ${msg}` + (next ? ` — falling back to "${next.name}"` : ""));
+      }
+    }
+    throw new Error(`All brain providers failed:\n  ${errors.join("\n  ")}`);
+  }
+}
+
+/** Construct a provider by name, returning null (with a log) if its creds are missing. */
+function buildBrain(name: string): BrainProvider | null {
+  try {
+    switch (name) {
+      case "claude": return new ClaudeBrain();
+      case "gemini": return new GeminiBrain();
+      case "ollama": return new OllamaBrain();
+      default: return null;
+    }
+  } catch (err) {
+    console.error(`[brain] "${name}" unavailable: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+export function makeBrain(mode: Mode): BrainProvider {
+  // Primary: explicit JARVIS_BRAIN override, else the mode default.
+  const primary = process.env.JARVIS_BRAIN?.toLowerCase() || (mode === "offline" ? "ollama" : "claude");
+  // Failover is on by default; JARVIS_FAILOVER=off pins to the primary only.
+  const failoverOff = /^(off|0|false|no)$/i.test(process.env.JARVIS_FAILOVER ?? "");
+
+  // Primary first, then the rest as fallbacks. Providers with missing creds are skipped.
+  const order = [primary, ...["claude", "ollama", "gemini"].filter((n) => n !== primary)];
+  const providers = (failoverOff ? [primary] : order)
+    .map(buildBrain)
+    .filter((p): p is BrainProvider => p !== null);
+
+  if (providers.length === 0) {
+    throw new Error(
+      "No brain provider is configured. Set one of: ANTHROPIC_API_KEY (claude), " +
+        "GEMINI_API_KEY (gemini), or OLLAMA_API_KEY / a local Ollama (ollama).",
+    );
+  }
+  if (providers.length === 1) return providers[0];
+  console.log(`[brain] failover chain: ${providers.map((p) => p.name).join(" → ")}`);
+  return new FailoverBrain(providers);
 }
