@@ -264,6 +264,10 @@ async function main() {
       cpu: cpuPct(),
       mem: Math.round(100 * (1 - os.freemem() / os.totalmem())),
       battery: await battery(),
+      uptime: Math.floor(process.uptime()),
+      brain: brain.name,
+      tts: tts.name,
+      mode,
     });
   });
 
