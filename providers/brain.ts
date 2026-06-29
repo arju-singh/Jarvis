@@ -283,6 +283,61 @@ class GeminiBrain implements BrainProvider {
   }
 }
 
+// --- Groq (online, OpenAI-compatible: fast + free tier) -------------------
+
+class GroqBrain implements BrainProvider {
+  readonly name = "groq";
+  private key: string;
+  private model: string;
+
+  constructor() {
+    const key = process.env.GROQ_API_KEY;
+    if (!key) throw new Error("Groq brain needs GROQ_API_KEY.");
+    this.key = key;
+    this.model = process.env.JARVIS_GROQ_MODEL ?? "llama-3.3-70b-versatile";
+  }
+
+  async reply(userText: string, history: Turn[], tools: Tool[], system: string): Promise<string> {
+    const messages: any[] = [
+      { role: "system", content: system },
+      ...history.map((t) => ({ role: t.role, content: t.text })),
+      { role: "user", content: userText },
+    ];
+    const toolDefs = tools.map((t) => ({
+      type: "function",
+      function: { name: t.name, description: t.description, parameters: t.input_schema },
+    }));
+
+    for (let i = 0; i < MAX_TOOL_ITERS; i++) {
+      let res: Response;
+      try {
+        res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.key}` },
+          body: JSON.stringify({ model: this.model, messages, tools: toolDefs.length ? toolDefs : undefined }),
+        });
+      } catch (err) {
+        throw new Error(`Cannot reach Groq: ${(err as Error).message}`);
+      }
+      if (!res.ok) throw new Error(`Groq error ${res.status}: ${(await res.text()).slice(0, 200)}`);
+
+      const data: any = await res.json();
+      const msg = data.choices?.[0]?.message;
+      if (!msg) throw new Error("Groq returned no message.");
+      messages.push(msg);
+
+      if (!msg.tool_calls?.length) return (msg.content ?? "").trim();
+      for (const call of msg.tool_calls) {
+        let args: unknown = {};
+        try { args = JSON.parse(call.function?.arguments || "{}"); } catch { /* leave {} */ }
+        const { text } = await runTool(tools, call.function?.name, args);
+        messages.push({ role: "tool", tool_call_id: call.id, content: text });
+      }
+    }
+    throw new Error(`Groq tool loop exceeded ${MAX_TOOL_ITERS} iterations.`);
+  }
+}
+
 // --- Automatic failover across the user's own providers --------------------
 
 /** Tries each provider in order; on error (quota, revoked key, network) falls to the next. */
@@ -315,6 +370,7 @@ class FailoverBrain implements BrainProvider {
 function buildBrain(name: string): BrainProvider | null {
   try {
     switch (name) {
+      case "groq": return new GroqBrain();
       case "claude": return new ClaudeBrain();
       case "gemini": return new GeminiBrain();
       case "ollama": return new OllamaBrain();
@@ -333,7 +389,7 @@ export function makeBrain(mode: Mode): BrainProvider {
   const failoverOff = /^(off|0|false|no)$/i.test(process.env.JARVIS_FAILOVER ?? "");
 
   // Primary first, then the rest as fallbacks. Providers with missing creds are skipped.
-  const order = [primary, ...["claude", "ollama", "gemini"].filter((n) => n !== primary)];
+  const order = [primary, ...["groq", "claude", "ollama", "gemini"].filter((n) => n !== primary)];
   const providers = (failoverOff ? [primary] : order)
     .map(buildBrain)
     .filter((p): p is BrainProvider => p !== null);

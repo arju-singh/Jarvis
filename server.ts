@@ -118,6 +118,12 @@ async function main() {
       command: pyPython,
       args: [join(process.cwd(), "mcp-servers/pytools/server.py")],
     });
+    // OS-control "hands" from the desktop HUD (FastMCP): open apps, volume,
+    // screenshots, workspace modes, chrome control, news, summarize, dev tools.
+    const sysServer = join(process.cwd(), "desktop/mcp_server.py");
+    if (existsSync(sysServer)) {
+      mcpServers.push({ name: "system", command: pyPython, args: [sysServer] });
+    }
   }
 
   const mcpTools = mcpServers.length ? await loadMcpTools(mcpServers) : [];
