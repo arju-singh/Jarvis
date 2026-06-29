@@ -1,0 +1,13 @@
+{
+  "name": "saas-starter-kit",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Drop-in SaaS building blocks: auth (scrypt + signed tokens + brute-force lockout), rate limiting, security headers + validation, and an SSE hub. Zero crypto deps.",
+  "scripts": {
+    "dev": "node --import tsx --env-file-if-exists=.env server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": { "express": "^5.1.0" },
+  "devDependencies": { "@types/express": "^5.0.0", "@types/node": "^22.0.0", "tsx": "^4.20.0", "typescript": "^5.7.0" }
+}
