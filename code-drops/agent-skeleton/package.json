@@ -1,0 +1,18 @@
+{
+  "name": "agent-skeleton",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Minimal, zero-dependency tool-calling AI agent — terminal REPL or importable library. Provider-swappable, MCP-ready, runs with no API keys.",
+  "main": "index.ts",
+  "scripts": {
+    "start": "node --import tsx --env-file-if-exists=.env cli.ts",
+    "dev": "node --import tsx --env-file-if-exists=.env cli.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.0"
+  }
+}
