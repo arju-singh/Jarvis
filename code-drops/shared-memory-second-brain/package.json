@@ -1,0 +1,20 @@
+{
+  "name": "shared-memory-second-brain",
+  "private": true,
+  "type": "module",
+  "version": "1.0.0",
+  "description": "Shared 'Second Brain' — a persistent, searchable memory service any agent can write to and recall from. Keyword recall with zero keys; optional semantic embeddings.",
+  "scripts": {
+    "dev": "node --import tsx --env-file-if-exists=.env server.ts",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Second Brain</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><circle cx='16' cy='16' r='13' fill='none' stroke='%23a78bfa' stroke-width='2'/><circle cx='16' cy='16' r='5' fill='%23a78bfa'/></svg>" />
+<style>
+  :root{--bg:#070611;--line:rgba(150,140,220,.16);--panel:rgba(22,18,38,.6);--text:#e7e4f4;--dim:#8c86a8;--accent:#a78bfa;--accent2:#c4b5fd;--glow:0 0 22px rgba(167,139,250,.45)}
+  *{box-sizing:border-box;margin:0;padding:0}html,body{height:100%}
+  body{font-family:-apple-system,"SF Pro Display","Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:radial-gradient(1100px 700px at 70% -10%,#16112e 0%,var(--bg) 60%);color:var(--text);min-height:100vh;-webkit-font-smoothing:antialiased}
+  header{display:flex;align-items:center;gap:12px;padding:18px 26px;border-bottom:1px solid var(--line)}
+  .ring{width:18px;height:18px;border-radius:50%;border:2px solid var(--accent);position:relative;box-shadow:var(--glow)}.ring::after{content:"";position:absolute;inset:4px;border-radius:50%;background:var(--accent)}
+  h1{font-size:16px;font-weight:700;letter-spacing:.26em}h1 span{color:var(--accent)}
+  .spacer{flex:1}.meta{color:var(--dim);font-size:12px;display:flex;gap:14px;align-items:center}.meta b{color:var(--accent2)}
+  .mode{font-size:10px;text-transform:uppercase;letter-spacing:.14em;border:1px solid var(--line);border-radius:20px;padding:3px 10px}
+  .wrap{max-width:880px;margin:0 auto;padding:24px 22px 60px}
+  .bar{display:flex;gap:10px;margin-bottom:18px}
+  input,textarea{background:var(--panel);border:1px solid var(--line);border-radius:12px;color:var(--text);font-size:14px;padding:12px 15px;outline:none;width:100%;font-family:inherit;transition:.15s}
+  input:focus,textarea:focus{border-color:var(--accent);box-shadow:var(--glow)}
+  input::placeholder,textarea::placeholder{color:var(--dim)}
+  button{cursor:pointer;border:none;border-radius:12px;font-size:13.5px;font-weight:600;padding:0 18px;color:#0a0814;background:linear-gradient(135deg,var(--accent2),var(--accent));transition:.15s}button:hover{filter:brightness(1.1)}
+  button.ghost{background:none;border:1px solid var(--line);color:var(--dim);font-weight:500}button.ghost:hover{color:var(--accent);border-color:var(--accent)}
+  .add{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px;margin-bottom:22px}
+  .add .row{display:flex;gap:10px;margin-top:10px}.add .row input{max-width:none}
+  .add .row .imp{max-width:120px}
+  h2{font-size:11px;letter-spacing:.2em;color:var(--dim);text-transform:uppercase;margin:18px 4px 10px}
+  .card{background:var(--panel);border:1px solid var(--line);border-radius:13px;padding:13px 15px;margin-bottom:10px;animation:rise .2s ease;position:relative}
+  @keyframes rise{from{opacity:0;transform:translateY(6px)}}
+  .card .txt{font-size:14.5px;line-height:1.5}
+  .card .sub{margin-top:7px;display:flex;flex-wrap:wrap;gap:7px;align-items:center;font-size:11px;color:var(--dim)}
+  .tag{background:rgba(167,139,250,.14);color:var(--accent2);border-radius:20px;padding:2px 9px}
+  .pill{border:1px solid var(--line);border-radius:20px;padding:2px 9px}
+  .stars{color:var(--accent)}
+  .score{margin-left:auto;color:var(--accent2);font-variant-numeric:tabular-nums}
+  .del{position:absolute;top:11px;right:12px;color:var(--dim);cursor:pointer;font-size:14px;opacity:0;transition:.15s}.card:hover .del{opacity:1}.del:hover{color:#f87171}
+  .empty{color:var(--dim);text-align:center;padding:36px;font-size:13px}
+</style>
+</head>
+<body>
+  <header>
+    <span class="ring"></span><h1>SECOND&nbsp;<span>BRAIN</span></h1>
+    <div class="spacer"></div>
+    <div class="meta"><span class="mode" id="mode">…</span><span><b id="count">0</b> memories</span></div>
+  </header>
+  <div class="wrap">
+    <div class="add">
+      <textarea id="newText" rows="2" placeholder="Remember something… (one fact per memory)"></textarea>
+      <div class="row">
+        <input id="newTags" placeholder="tags, comma, separated" />
+        <input id="newImp" class="imp" type="number" min="1" max="5" value="3" title="importance 1–5" />
+        <button id="addBtn">Remember</button>
+      </div>
+    </div>
+
+    <div class="bar">
+      <input id="q" placeholder="Recall…  (search by relevance)" />
+      <button id="searchBtn">Recall</button>
+      <button class="ghost" id="allBtn">Show all</button>
+    </div>
+
+    <h2 id="listTitle">All memories</h2>
+    <div id="list"><div class="empty">Loading…</div></div>
+  </div>
+<script>
+(function(){"use strict";
+  var $=function(i){return document.getElementById(i);},list=$('list');
+  function esc(s){var d=document.createElement('div');d.textContent=s;return d.innerHTML;}
+  function stars(n){return '★'.repeat(n)+'☆'.repeat(5-n);}
+  function card(m,score){
+    var tags=(m.tags||[]).map(function(t){return '<span class="tag">'+esc(t)+'</span>';}).join('');
+    var sc=(score!=null)?'<span class="score">'+score.toFixed(2)+'</span>':'';
+    return '<div class="card" data-id="'+m.id+'"><span class="del" title="Forget">✕</span>'+
+      '<div class="txt">'+esc(m.text)+'</div><div class="sub">'+
+      '<span class="pill">'+esc(m.type||'fact')+'</span>'+tags+
+      '<span class="stars" title="importance">'+stars(m.importance||3)+'</span>'+
+      '<span class="pill">'+esc(m.source||'')+'</span>'+sc+'</div></div>';
+  }
+  function paint(items,scored){
+    if(!items.length){list.innerHTML='<div class="empty">Nothing here yet.</div>';return;}
+    list.innerHTML=items.map(function(m){return card(m,scored?m.score:null);}).join('');
+  }
+  function stats(){fetch('/stats').then(function(r){return r.json();}).then(function(d){
+    $('count').textContent=d.count;$('mode').textContent=d.mode+' recall';});}
+  function loadAll(){$('listTitle').textContent='All memories';
+    fetch('/memories').then(function(r){return r.json();}).then(function(d){paint(d.memories,false);stats();});}
+  function recall(){var q=$('q').value.trim();if(!q){loadAll();return;}
+    $('listTitle').textContent='Recall: “'+q+'”';
+    fetch('/recall?q='+encodeURIComponent(q)+'&limit=20').then(function(r){return r.json();}).then(function(d){paint(d.hits,true);});}
+  function add(){var text=$('newText').value.trim();if(!text)return;
+    var tags=$('newTags').value.split(',').map(function(s){return s.trim();}).filter(Boolean);
+    fetch('/remember',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({text:text,tags:tags,importance:Number($('newImp').value)||3,source:'web'})})
+      .then(function(){$('newText').value='';$('newTags').value='';loadAll();});}
+  list.addEventListener('click',function(e){if(!e.target.classList.contains('del'))return;
+    var id=e.target.parentNode.getAttribute('data-id');
+    fetch('/memories/'+id,{method:'DELETE'}).then(function(){e.target.parentNode.remove();stats();});});
+  $('addBtn').onclick=add;$('searchBtn').onclick=recall;$('allBtn').onclick=function(){$('q').value='';loadAll();};
+  $('q').addEventListener('keydown',function(e){if(e.key==='Enter')recall();});
+  $('newText').addEventListener('keydown',function(e){if(e.key==='Enter'&&(e.metaKey||e.ctrlKey))add();});
+  loadAll();
+})();
+</script>
+</body>
+</html>
