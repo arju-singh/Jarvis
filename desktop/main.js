@@ -92,7 +92,7 @@ const cors = require('cors');
 
 function startLocalServer() {
   const app = express();
-  const port = 3000;
+  const port = 3300; // moved off 3000 (in use by another local app)
 
   app.use(cors());
   app.use((req, res, next) => {
@@ -130,7 +130,7 @@ function createWindow() {
     show: false,
   });
 
-  mainWindow.loadURL('http://localhost:3000/index.html');
+  mainWindow.loadURL('http://localhost:3300/index.html');
 
   mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
     const levels = ['DEBUG', 'INFO', 'WARN', 'ERROR'];

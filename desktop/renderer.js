@@ -448,7 +448,7 @@ async function initVoskSTT() {
   try {
     jarvisTextEl.textContent = "Loading local STT package...";
     // Loading from tar.gz is more robust for vosk-browser over HTTP
-    const model = await Vosk.createModel('http://localhost:3000/models/en-us.tar.gz');
+    const model = await Vosk.createModel('http://localhost:3300/models/en-us.tar.gz');
     voskModel = model;
     
     // We'll use Vosk for continuous transcription
@@ -1316,8 +1316,8 @@ async function speakTTS(text) {
 
   await waitForUser();
 
-  // USE SARVAM TTS (with automatic fallback to Groq/Web)
-  speakSarvamTTS(text);
+  // Free path: Groq Orpheus → Web Speech fallback (Sarvam is paid — skipped).
+  speakGroqTTS(text);
 }
 
 async function speakSarvamTTS(text) {
